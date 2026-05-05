@@ -21,7 +21,7 @@ Compile it by yourself with CMake or MSBuild.
 
 ## Online Version
 Use it directly from browser: 
-https://openobfuscator.us/ 
+https://openobfuscator.us/ THE SITE IS NOT AVAILABLE RIGHT NOW!
 
 ---
 
