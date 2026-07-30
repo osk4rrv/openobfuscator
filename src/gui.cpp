@@ -68,6 +68,19 @@ bool isChecked(int id) {
     return SendMessageW(GetDlgItem(g_ui.window, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
 }
 
+bool parseSeed(const std::wstring& text, uint32_t& value) {
+    if (text.empty()) return false;
+    uint32_t parsed = 0;
+    for (wchar_t ch : text) {
+        if (ch < L'0' || ch > L'9') return false;
+        const uint32_t digit = static_cast<uint32_t>(ch - L'0');
+        if (parsed > (UINT32_MAX - digit) / 10U) return false;
+        parsed = parsed * 10U + digit;
+    }
+    value = parsed;
+    return true;
+}
+
 std::string readFile(const std::wstring& path) {
     std::ifstream file(std::filesystem::path(path), std::ios::binary);
     if (!file.is_open()) throw std::runtime_error("Nie mozna otworzyc pliku wejsciowego.");
@@ -136,7 +149,10 @@ void runObfuscation() {
 
         std::wstring seedText = getText(g_ui.seed);
         if (!seedText.empty()) {
-            opts.seed = static_cast<uint32_t>(std::stoul(seedText));
+            if (!parseSeed(seedText, opts.seed)) {
+                throw std::runtime_error("Seed must be an integer from 0 to 4294967295.");
+            }
+            opts.seedProvided = true;
         }
         if (!opts.luaJitMode) {
             opts.virtualizeBytecode = false;
@@ -176,7 +192,7 @@ void createUi(HWND hwnd) {
     g_ui.window = hwnd;
     g_ui.font = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
-    makeControl(L"STATIC", L"OpenObfuscator LuaJIT VM", SS_LEFT, 22, 16, 320, 26, 0);
+    makeControl(L"STATIC", L"OpenObfuscator LuaJIT Source VM", SS_LEFT, 22, 16, 320, 26, 0);
     makeControl(L"STATIC", L"Input Lua:", SS_LEFT, 22, 56, 105, 22, 0);
     makeControl(L"STATIC", L"Output Lua:", SS_LEFT, 22, 90, 105, 22, 0);
     g_ui.input = makeControl(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 140, 54, 500, 24, IdInput);
@@ -190,7 +206,7 @@ void createUi(HWND hwnd) {
     makeCheck(L"Junk code injection", 22, 170, 190, IdJunk, true);
     makeCheck(L"Anti-debug guards", 240, 170, 190, IdAntiDebug, true);
     makeCheck(L"Compress output", 458, 170, 190, IdCompress, true);
-    makeCheck(L"LuaJIT bytecode VM", 22, 204, 190, IdVm, true);
+    makeCheck(L"LuaJIT source VM", 22, 204, 190, IdVm, true);
     makeCheck(L"LuaJIT-only runtime", 240, 204, 190, IdLuaJit, true);
     makeCheck(L"OpenObfuscator style", 458, 204, 220, IdStyle, true);
     makeCheck(L"Control-flow flattening", 22, 238, 200, IdFlatten, false);
@@ -270,7 +286,7 @@ int runGui() {
 
     RegisterClassExW(&wc);
 
-    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT VM", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
+    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT Source VM", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
     if (!hwnd) return 1;
 
     MSG msg {};

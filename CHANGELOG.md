@@ -1,0 +1,10 @@
+# Changelog
+
+## 1.1.0
+
+- Added source VM format 1 with a unique HALT opcode, strict program termination checks, reconstructed-source length validation, and Adler-32 integrity verification.
+- Added safe LuaJIT/`bit` discovery and a stable `@openobfuscator-vm` chunk name while preserving varargs and multiple returns.
+- Removed destructive host hook and JIT changes from anti-debug preludes.
+- Added explicit seed-presence tracking, strict uint32 CLI/GUI seed parsing, `-s`, `--version`, and improved argument errors.
+- Added a C++17 CMake build, install rules, ZIP packaging, unit tests, and an optional LuaJIT end-to-end test.
+- Updated user-facing terminology from bytecode VM to source VM.
