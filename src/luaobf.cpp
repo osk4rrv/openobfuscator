@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -54,7 +55,7 @@ bool Obfuscator::isBuiltin(std::string_view word) {
 Obfuscator::Obfuscator(ObfuscationOptions opts)
     : m_opts(std::move(opts))
 {
-    if (m_opts.seed == 0) {
+    if (!m_opts.seedProvided && m_opts.seed == 0) {
         std::random_device rd;
         m_opts.seed = rd();
     }
@@ -654,15 +655,26 @@ std::string Obfuscator::buildStylePrelude() {
 std::string Obfuscator::buildAntiDebugPrelude() {
     std::ostringstream ss;
     ss << "pcall(function()"
-       << "local a=debug and debug.getinfo and debug.getinfo(1,'S') or nil;"
+       << "local d=debug;"
+       << "local a=d and d.getinfo and d.getinfo(1,'S') or nil;"
        << "if a and a.short_src and a.short_src:match('^@') then return end;"
-       << "if debug and debug.sethook then debug.sethook(nil) end;"
-       << "if jit and jit.flush then jit.flush() end;"
        << "end)\n";
     return ss.str();
 }
 
-std::string Obfuscator::buildLuaJitBytecodeVm(std::string_view source) {
+static uint32_t adler32(std::string_view source) {
+    constexpr uint32_t ModAdler = 65521;
+    uint32_t a = 1;
+    uint32_t b = 0;
+    for (unsigned char byte : source) {
+        a = (a + byte) % ModAdler;
+        b = (b + a) % ModAdler;
+    }
+    return (b << 16U) | a;
+}
+
+std::string Obfuscator::buildLuaJitSourceVm(std::string_view source) {
+    constexpr int FormatVersion = 1;
     const uint8_t initialKey = static_cast<uint8_t>((randomByte() | 1U) & 0xFFU);
     std::set<int> opSet;
     auto nextOp = [&]() {
@@ -677,8 +689,9 @@ std::string Obfuscator::buildLuaJitBytecodeVm(std::string_view source) {
     const int opEmit = nextOp();
     const int opMutate = nextOp();
     const int opNoise = nextOp();
+    const int opHalt = nextOp();
     std::vector<uint32_t> program;
-    program.reserve(source.size() + (source.size() / 9) + 8);
+    program.reserve(source.size() + (source.size() / 9) + 9);
 
     uint8_t key = initialKey;
     auto pushWord = [&](int op, int a, int b, int c) {
@@ -707,6 +720,7 @@ std::string Obfuscator::buildLuaJitBytecodeVm(std::string_view source) {
         uint32_t ip = static_cast<uint32_t>(program.size());
         key = static_cast<uint8_t>((key + pad + plain + ip) & 0xFFU);
     }
+    pushWord(opHalt, randomByte(), randomByte(), randomByte());
 
     const std::string vBit = generateRandomName(10);
     const std::string vCode = generateRandomName(10);
@@ -720,21 +734,36 @@ std::string Obfuscator::buildLuaJitBytecodeVm(std::string_view source) {
     const std::string vLoad = generateRandomName(10);
     const std::string vFn = generateRandomName(10);
     const std::string vErr = generateRandomName(10);
+    const std::string vFormat = generateRandomName(10);
+    const std::string vHalted = generateRandomName(10);
+    const std::string vAdlerA = generateRandomName(10);
+    const std::string vAdlerB = generateRandomName(10);
+    const std::string vAdler = generateRandomName(10);
 
     std::ostringstream ss;
-    ss << "return(function(...)\n"
-       << "local " << vBit << "=bit\n"
-       << "if not(jit and " << vBit << " and " << vBit << ".bxor and " << vBit << ".band and " << vBit << ".rshift)then error(\"integrity:luajit\",0)end\n"
+    ss << "-- OpenObfuscator source VM format 1\n"
+       << "return(function(...)\n"
+       << "local " << vBit << "=_G and _G.bit or nil\n"
+       << "if not " << vBit << " then local ok,v=pcall(require,'bit');if ok then " << vBit << "=v end end\n"
+       << "if not(type(jit)=='table' and type(jit.version)=='string' and jit.version:match('^LuaJIT') and type("
+       << vBit << ")=='table' and type(" << vBit << ".bxor)=='function' and type(" << vBit
+       << ".band)=='function' and type(" << vBit << ".rshift)=='function')then error(\"integrity:luajit\",0)end\n"
        << "local bxor,band,rshift=" << vBit << ".bxor," << vBit << ".band," << vBit << ".rshift\n"
        << "local " << vChar << "=string.char\n"
        << "local " << vConcat << "=table.concat\n"
+       << "local " << vFormat << "=" << FormatVersion << "\n"
+       << "if " << vFormat << "~=1 then error(\"integrity:vm\",0)end\n"
        << "local " << vCode << "={\n" << emitNumberList(program) << "\n}\n"
        << "local " << vOut << "={}\n"
        << "local " << vKey << "=" << static_cast<int>(initialKey) << "\n"
+       << "local " << vHalted << "=false\n"
        << "for ip=1,#" << vCode << " do\n"
        << "local " << vWord << "=" << vCode << "[ip]\n"
        << "local " << vOp << "=band(rshift(" << vWord << ",24),255)\n"
-       << "if " << vOp << "==" << opEmit << " then\n"
+       << "if " << vHalted << " then error(\"integrity:vm\",0)end\n"
+       << "if " << vOp << "==" << opHalt << " then\n"
+       << vHalted << "=true\n"
+       << "elseif " << vOp << "==" << opEmit << " then\n"
        << "local e=band(rshift(" << vWord << ",16),255)\n"
        << "local p=band(rshift(" << vWord << ",8),255)\n"
        << "local c=bxor(e,band(" << vKey << "+p,255))\n"
@@ -750,9 +779,16 @@ std::string Obfuscator::buildLuaJitBytecodeVm(std::string_view source) {
        << "error(\"integrity:vm\",0)\n"
        << "end\n"
        << "end\n"
+       << "if not " << vHalted << " then error(\"integrity:vm\",0)end\n"
        << "local " << vSrc << "=" << vConcat << "(" << vOut << ")\n"
+       << "if #" << vSrc << "~=" << source.size() << " then error(\"integrity:vm\",0)end\n"
+       << "local " << vAdlerA << "," << vAdlerB << "=1,0\n"
+       << "for i=1,#" << vSrc << " do " << vAdlerA << "=(" << vAdlerA << "+string.byte(" << vSrc
+       << ",i))%65521;" << vAdlerB << "=(" << vAdlerB << "+" << vAdlerA << ")%65521 end\n"
+       << "local " << vAdler << "=" << vAdlerB << "*65536+" << vAdlerA << "\n"
+       << "if " << vAdler << "~=" << adler32(source) << " then error(\"integrity:vm\",0)end\n"
        << "local " << vLoad << "=loadstring or load\n"
-       << "local " << vFn << "," << vErr << "=" << vLoad << "(" << vSrc << ")\n"
+       << "local " << vFn << "," << vErr << "=" << vLoad << "(" << vSrc << ",'@openobfuscator-vm')\n"
        << "if not " << vFn << " then error(\"load:vm \"..tostring(" << vErr << "),0)end\n"
        << "return " << vFn << "(...)\n"
        << "end)(...)\n";
@@ -939,17 +975,9 @@ void Obfuscator::passAntiDebug(std::vector<Token>& tokens) {
     antidebug << "\n"
         << "local _adbg_x" << randomHex(6) << "="
         << "pcall(function()"
-        << "local a=debug.getinfo(1,'S');"
+        << "local d=debug;"
+        << "local a=d and d.getinfo and d.getinfo(1,'S') or nil;"
         << "if a and a.short_src and a.short_src:match('^@') then return end;"
-        << "local f=assert;"
-        << "f=nil;"
-        << "collectgarbage('collect');"
-        << "if f~=nil then while true do end end;"
-        << "local s=debug.sethook or rawset;"
-        << "if s then s(nil) end;"
-        << "local r=debug.getregistry;"
-        << "if r and r() then end;"
-        << "if jit and jit.flush then jit.flush() end;"
         << "end)\n";
 
     size_t insertPos = 0;
@@ -1017,7 +1045,7 @@ std::string Obfuscator::obfuscate(std::string_view source) {
             body += buildAntiDebugPrelude();
         }
         body.append(source.data(), source.size());
-        return buildBanner() + buildLuaJitBytecodeVm(body);
+        return buildBanner() + buildLuaJitSourceVm(body);
     }
 
     std::vector<Token> tokens = tokenize(source);
@@ -1055,7 +1083,7 @@ std::string Obfuscator::obfuscate(std::string_view source) {
         body = buildStylePrelude() + body;
     }
     if (m_opts.luaJitMode && m_opts.virtualizeBytecode) {
-        body = buildLuaJitBytecodeVm(body);
+        body = buildLuaJitSourceVm(body);
     }
     return buildBanner() + body;
 }

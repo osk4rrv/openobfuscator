@@ -11,6 +11,8 @@
 
 namespace luaobf {
 
+inline constexpr std::string_view Version = "1.1.0";
+
 enum class TokenType : uint8_t {
     WHITESPACE,
     NEWLINE,
@@ -48,6 +50,7 @@ struct ObfuscationOptions {
     bool preserveOpenObfuscatorStyle = true;
     bool compressWhitespace = true;
     uint32_t seed = 0;
+    bool seedProvided = false;
 };
 
 class Obfuscator {
@@ -76,7 +79,7 @@ private:
     std::string buildBanner();
     std::string buildStylePrelude();
     std::string buildAntiDebugPrelude();
-    std::string buildLuaJitBytecodeVm(std::string_view source);
+    std::string buildLuaJitSourceVm(std::string_view source);
     std::string generateRandomName(size_t len);
     std::string generateJunkCode();
 

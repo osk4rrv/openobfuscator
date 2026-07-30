@@ -1,35 +1,49 @@
 #include "luaobf.h"
 #include "gui.h"
 
-#include <iostream>
+#include <charconv>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
-#include <cstring>
-#include <filesystem>
+#include <string_view>
 
 namespace fs = std::filesystem;
 
 static void printUsage(const char* prog) {
-    std::cout << "LuaObfuscator - Military Grade Lua/LuaJIT Obfuscator\n"
+    std::cout << "OpenObfuscator " << luaobf::Version << " - Lua/LuaJIT source obfuscator\n"
               << "Usage: " << prog << " [options] <input.lua> [output.lua]\n\n"
               << "Options:\n"
               << "  -o <file>         Output file (default: stdout)\n"
-              << "  -s <seed>         Random seed for reproducible output\n"
+              << "  -s, --seed <n>    Set uint32 random seed for reproducible output\n"
               << "  --no-numbers      Disable number obfuscation\n"
               << "  --no-strings      Disable string obfuscation\n"
               << "  --no-rename       Disable identifier renaming\n"
               << "  --no-junk         Disable junk code injection\n"
               << "  --no-antidebug    Disable anti-debug code\n"
               << "  --no-compress     Keep whitespace and comments\n"
-              << "  --no-vm           Disable LuaJIT VM bytecode wrapper\n"
+              << "  --no-vm           Disable LuaJIT source VM wrapper\n"
               << "  --no-luajit       Disable LuaJIT-only output requirement\n"
               << "  --no-style        Disable OpenObfuscator.us style banner/prelude\n"
               << "  --flatten         Enable control flow flattening\n"
-              << "  --seed <n>        Set random seed\n"
               << "  --gui             Open graphical interface\n"
+              << "  --version         Show version\n"
               << "  -h, --help        Show this help\n"
               << std::endl;
+}
+
+static bool parseUint32(std::string_view text, uint32_t& value) {
+    if (text.empty()) return false;
+    uint32_t parsed = 0;
+    const char* begin = text.data();
+    const char* end = begin + text.size();
+    const auto result = std::from_chars(begin, end, parsed, 10);
+    if (result.ec != std::errc() || result.ptr != end) return false;
+    value = parsed;
+    return true;
 }
 
 static std::string readFile(const std::string& path) {
@@ -54,7 +68,12 @@ static void writeFile(const std::string& path, const std::string& content) {
 
 int main(int argc, char* argv[]) {
     if (argc == 1) {
+#ifdef _WIN32
         return luaobf::runGui();
+#else
+        printUsage(argv[0]);
+        return 0;
+#endif
     }
 
     luaobf::ObfuscationOptions opts;
@@ -62,17 +81,36 @@ int main(int argc, char* argv[]) {
     std::string outputFile;
 
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        const std::string arg = argv[i];
 
         if (arg == "-h" || arg == "--help") {
             printUsage(argv[0]);
             return 0;
-        } else if (arg == "--gui") {
+        }
+        if (arg == "--version") {
+            std::cout << "OpenObfuscator " << luaobf::Version << '\n';
+            return 0;
+        }
+        if (arg == "--gui") {
             return luaobf::runGui();
-        } else if (arg == "-o" && i + 1 < argc) {
+        }
+        if (arg == "-o") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing value for -o.\n";
+                return 1;
+            }
             outputFile = argv[++i];
-        } else if (arg == "--seed" && i + 1 < argc) {
-            opts.seed = static_cast<uint32_t>(std::stoul(argv[++i]));
+        } else if (arg == "-s" || arg == "--seed") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing value for " << arg << ".\n";
+                return 1;
+            }
+            const std::string seedText = argv[++i];
+            if (!parseUint32(seedText, opts.seed)) {
+                std::cerr << "Error: Invalid uint32 seed: " << seedText << '\n';
+                return 1;
+            }
+            opts.seedProvided = true;
         } else if (arg == "--no-numbers") {
             opts.obfuscateNumbers = false;
         } else if (arg == "--no-strings") {
@@ -100,15 +138,18 @@ int main(int argc, char* argv[]) {
                 inputFile = arg;
             } else if (outputFile.empty()) {
                 outputFile = arg;
+            } else {
+                std::cerr << "Error: Unexpected argument: " << arg << '\n';
+                return 1;
             }
         } else {
-            std::cerr << "Unknown option: " << arg << std::endl;
-            printUsage(argv[0]);
+            std::cerr << "Error: Unknown option: " << arg << '\n';
             return 1;
         }
     }
 
     if (inputFile.empty()) {
+        std::cerr << "Error: Missing input file.\n";
         printUsage(argv[0]);
         return 1;
     }
@@ -118,10 +159,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string source = readFile(inputFile);
-
+    const std::string source = readFile(inputFile);
     luaobf::Obfuscator obfuscator(opts);
-    std::string result = obfuscator.obfuscate(source);
+    const std::string result = obfuscator.obfuscate(source);
 
     if (!outputFile.empty()) {
         writeFile(outputFile, result);
