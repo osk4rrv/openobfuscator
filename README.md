@@ -1,6 +1,13 @@
 # OpenObfuscator
 
-OpenObfuscator 1.1.0 is a dependency-free C++17 Lua/LuaJIT source obfuscator. Its default output uses a LuaJIT source VM wrapper while preserving the behavior, varargs, and multiple return values of the input chunk.
+OpenObfuscator 1.2.0 is a dependency-free C++17 source obfuscator for Lua/LuaJIT and JavaScript. Both languages use the same native source-VM encoder: randomized 32-bit instructions reconstruct the protected source only at runtime, with strict HALT, byte-length, and Adler-32 integrity checks.
+
+## Supported runtimes
+
+- **Lua:** LuaJIT with the `bit` API when the source VM is enabled. Use `--no-vm` or `--no-luajit` for the legacy Lua token-transform pipeline.
+- **JavaScript:** modern browsers and Node.js. The generated wrapper supports CommonJS modules and classic scripts that do not depend on persistent top-level `let`/`const` bindings. ECMAScript modules are not supported by the source-VM runtime.
+
+The input language is inferred from `.lua`, `.js`, or `.cjs`. ECMAScript module files (`.mjs`) are rejected because the source-VM runtime is not module-aware. Use `--language` to override detection for supported script syntax.
 
 ## Build and test
 
@@ -12,7 +19,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The C++ unit and CLI contract tests are always registered when `BUILD_TESTING` is enabled. If a `luajit` executable is found during configuration, CTest also registers an end-to-end test that obfuscates and executes `tests/fixture.lua`, compares its behavior with the source, and runs `tests/test_integrity.lua` against unknown opcodes, invalid HALT flow, payload corruption, and length mismatches. Set `OPENOBFUSCATOR_REQUIRE_LUAJIT_TESTS=ON` for release builds so configuration fails instead of skipping the runtime test when LuaJIT is unavailable.
+The C++ unit and CLI contract tests are registered when `BUILD_TESTING` is enabled. If `luajit` is found, CTest also registers the LuaJIT end-to-end and source-VM integrity checks. Set `OPENOBFUSCATOR_REQUIRE_LUAJIT_TESTS=ON` for release builds so configuration fails when LuaJIT is unavailable.
 
 Install or create the ZIP package with:
 
@@ -21,41 +28,48 @@ cmake --install build --prefix install
 cmake --build build --target package
 ```
 
-On Windows, the executable includes the native GUI and links the required Win32 libraries.
+On Windows, the executable includes the native GUI. The GUI detects the language from the selected file extension.
 
 ## CLI
 
 ```text
-openobfuscator [options] <input.lua> [output.lua]
+openobfuscator [options] <input.lua|input.js> [output]
 ```
 
-If no output file is specified, generated Lua is written to stdout. Main options:
+If no output file is specified, generated code is written to stdout. Main options:
 
 - `-o <file>`: write to a specific output file.
+- `-l <language>`, `--language <language>`: select `lua`, `javascript`, `js`, or `auto`.
 - `-s <n>`, `--seed <n>`: use a reproducible uint32 seed, including an explicit seed of `0`.
-- `--no-numbers`, `--no-strings`, `--no-rename`, `--no-junk`: disable individual transformations.
-- `--no-antidebug`, `--no-compress`, `--no-style`: disable the corresponding prelude/output features.
-- `--no-vm`: disable the LuaJIT source VM wrapper (the flag name is retained for compatibility).
-- `--no-luajit`: produce output that does not require LuaJIT; this also disables the source VM.
-- `--flatten`: enable the existing control-flow flattening option.
+- `--no-numbers`, `--no-strings`, `--no-rename`, `--no-junk`: disable Lua token transformations.
+- `--no-antidebug`, `--no-compress`, `--no-style`: disable the corresponding Lua prelude/output features.
+- `--no-vm`: disable the source-VM wrapper.
+- `--no-luajit`: produce Lua output that does not require LuaJIT; JavaScript output is unaffected.
+- `--flatten`: enable the existing Lua control-flow flattening option.
 - `--gui`: open the Windows graphical interface.
-- `--version`: print `1.1.0`.
+- `--version`: print `1.2.0`.
 - `-h`, `--help`: show all options.
 
-Seeds are parsed as complete decimal values in the range `0` through `4294967295`; partial, negative, and overflowing values are rejected.
+Seeds are parsed as complete decimal values from `0` through `4294967295`; partial, negative, and overflowing values are rejected.
 
 ## Source VM format 1
 
-Version 1.1 introduces source VM format 1. The wrapper stores an encoded instruction stream as 32-bit words with randomized opcodes for source-byte emission, key mutation, noise, and a unique HALT operation. At runtime it requires exactly one effective HALT at the end of the stream. A missing or duplicate HALT, an instruction after HALT, or an unknown opcode raises `integrity:vm`.
+The source VM stores an encoded instruction stream as 32-bit words with randomized opcodes for source-byte emission, key mutation, noise, and HALT. At runtime, the language-specific wrapper rejects missing, duplicate, or misplaced HALT instructions and unknown opcodes. It validates the reconstructed byte length and Adler-32 checksum before executing the source.
 
-Before loading the reconstructed chunk, the wrapper checks its exact byte length and Adler-32 checksum. It first uses the global `bit` module or safely attempts `require('bit')`, then verifies that the runtime is LuaJIT. The source is loaded with the chunk name `@openobfuscator-vm`.
+Lua output discovers and verifies LuaJIT's `bit` API before loading the reconstructed chunk as `@openobfuscator-vm`. JavaScript output reconstructs UTF-8 bytes and executes CommonJS source in a module-compatible function scope or classic-script source through global indirect evaluation.
 
 ### Limitations
 
-- This is a **source VM**, not a Lua bytecode VM. It decodes and interprets an internal 32-bit instruction stream whose payload reconstructs Lua source.
-- The original source exists in plaintext in process memory immediately before `loadstring`/`load`; this is obfuscation, not encryption or a secure execution boundary.
-- Source VM output requires LuaJIT and its `bit` API. Use `--no-vm` or `--no-luajit` when that requirement is unsuitable.
+- This is a **source VM**, not a Lua or JavaScript bytecode VM.
+- The original source exists in plaintext in process memory immediately before execution. This is obfuscation, not encryption or a secure execution boundary.
+- ECMAScript module semantics, including `import`, `export`, top-level `await`, `import.meta`, and module-level `this`, are not supported by the JavaScript source VM.
+- Classic-script top-level `let` and `const` bindings created by the wrapper do not persist for later scripts; use CommonJS or avoid depending on persistent global lexical bindings.
+- JavaScript source-VM output requires runtime string code generation (`Function`/`eval`) and will not run under policies that disable it, such as a CSP without `unsafe-eval` or Node.js with `--disallow-code-generation-from-strings`.
 - Obfuscation cannot prevent a determined runtime observer from recovering code.
+
+## Library API
+
+The existing `luaobf::Obfuscator` API remains source compatible. Set `ObfuscationOptions::language` to `Language::Lua` or `Language::JavaScript` before calling `obfuscate()`.
 
 ## License and credits
 

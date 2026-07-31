@@ -1,12 +1,15 @@
 #include "luaobf.h"
 #include "gui.h"
 
+#include <algorithm>
 #include <charconv>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -14,10 +17,13 @@
 namespace fs = std::filesystem;
 
 static void printUsage(const char* prog) {
-    std::cout << "OpenObfuscator " << luaobf::Version << " - Lua/LuaJIT source obfuscator\n"
-              << "Usage: " << prog << " [options] <input.lua> [output.lua]\n\n"
+    std::cout << "OpenObfuscator " << luaobf::Version << " - Lua/LuaJIT and JavaScript source obfuscator\n"
+              << "Usage: " << prog << " [options] <input.lua|input.js> [output]\n\n"
               << "Options:\n"
               << "  -o <file>         Output file (default: stdout)\n"
+              << "  -l, --language <language>\n"
+              << "                    Input language: lua, javascript, js, or auto\n"
+              << "                    (default: infer from .lua/.js/.cjs)\n"
               << "  -s, --seed <n>    Set uint32 random seed for reproducible output\n"
               << "  --no-numbers      Disable number obfuscation\n"
               << "  --no-strings      Disable string obfuscation\n"
@@ -25,8 +31,8 @@ static void printUsage(const char* prog) {
               << "  --no-junk         Disable junk code injection\n"
               << "  --no-antidebug    Disable anti-debug code\n"
               << "  --no-compress     Keep whitespace and comments\n"
-              << "  --no-vm           Disable LuaJIT source VM wrapper\n"
-              << "  --no-luajit       Disable LuaJIT-only output requirement\n"
+              << "  --no-vm           Disable the source VM wrapper\n"
+              << "  --no-luajit       Disable LuaJIT-only output for Lua input\n"
               << "  --no-style        Disable OpenObfuscator.us style banner/prelude\n"
               << "  --flatten         Enable control flow flattening\n"
               << "  --gui             Open graphical interface\n"
@@ -44,6 +50,38 @@ static bool parseUint32(std::string_view text, uint32_t& value) {
     if (result.ec != std::errc() || result.ptr != end) return false;
     value = parsed;
     return true;
+}
+
+static std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+static bool parseLanguage(std::string_view text, std::optional<luaobf::Language>& language) {
+    const std::string value = lowercase(std::string(text));
+    if (value == "auto") {
+        language.reset();
+        return true;
+    }
+    if (value == "lua" || value == "luajit") {
+        language = luaobf::Language::Lua;
+        return true;
+    }
+    if (value == "javascript" || value == "js") {
+        language = luaobf::Language::JavaScript;
+        return true;
+    }
+    return false;
+}
+
+static luaobf::Language inferLanguage(const std::string& path) {
+    const std::string extension = lowercase(fs::path(path).extension().string());
+    if (extension == ".js" || extension == ".cjs") {
+        return luaobf::Language::JavaScript;
+    }
+    return luaobf::Language::Lua;
 }
 
 static std::string readFile(const std::string& path) {
@@ -77,6 +115,7 @@ int main(int argc, char* argv[]) {
     }
 
     luaobf::ObfuscationOptions opts;
+    std::optional<luaobf::Language> requestedLanguage;
     std::string inputFile;
     std::string outputFile;
 
@@ -94,7 +133,18 @@ int main(int argc, char* argv[]) {
         if (arg == "--gui") {
             return luaobf::runGui();
         }
-        if (arg == "-o") {
+        if (arg == "-l" || arg == "--language") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: Missing value for " << arg << ".\n";
+                return 1;
+            }
+            const std::string languageText = argv[++i];
+            if (!parseLanguage(languageText, requestedLanguage)) {
+                std::cerr << "Error: Unsupported language: " << languageText
+                          << ". Expected lua, javascript, js, or auto.\n";
+                return 1;
+            }
+        } else if (arg == "-o") {
             if (i + 1 >= argc) {
                 std::cerr << "Error: Missing value for -o.\n";
                 return 1;
@@ -128,7 +178,6 @@ int main(int argc, char* argv[]) {
             opts.virtualizeBytecode = false;
         } else if (arg == "--no-luajit") {
             opts.luaJitMode = false;
-            opts.virtualizeBytecode = false;
         } else if (arg == "--no-style") {
             opts.preserveOpenObfuscatorStyle = false;
         } else if (arg == "--flatten") {
@@ -157,6 +206,16 @@ int main(int argc, char* argv[]) {
     if (!fs::exists(inputFile)) {
         std::cerr << "Error: Input file not found: " << inputFile << std::endl;
         return 1;
+    }
+
+    if (lowercase(fs::path(inputFile).extension().string()) == ".mjs") {
+        std::cerr << "Error: ECMAScript modules (.mjs) are not supported by the JavaScript source VM.\n";
+        return 1;
+    }
+
+    opts.language = requestedLanguage.value_or(inferLanguage(inputFile));
+    if (opts.language == luaobf::Language::Lua && !opts.luaJitMode) {
+        opts.virtualizeBytecode = false;
     }
 
     const std::string source = readFile(inputFile);

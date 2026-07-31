@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(OpenObfuscator VERSION 1.1.0 LANGUAGES CXX)
+project(OpenObfuscator VERSION 1.2.0 LANGUAGES CXX)
 
 add_library(openobfuscator_core
     src/luaobf.cpp
@@ -25,6 +25,29 @@ if(WIN32)
 endif()
 if(MINGW)
     target_link_options(openobfuscator PRIVATE -static)
+endif()
+
+if(EMSCRIPTEN)
+    add_executable(openobfuscator_web src/wasm.cpp)
+    target_link_libraries(openobfuscator_web PRIVATE openobfuscator_core)
+    target_compile_features(openobfuscator_web PRIVATE cxx_std_17)
+    target_compile_options(openobfuscator_web PRIVATE -fexceptions)
+    target_link_options(openobfuscator_web PRIVATE
+        -fexceptions
+        "-sWASM=1"
+        "-sMODULARIZE=1"
+        "-sEXPORT_NAME=createOpenObfuscator"
+        "-sENVIRONMENT=web,worker,node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sFILESYSTEM=0"
+        "-sDISABLE_EXCEPTION_CATCHING=0"
+        "-sEXPORTED_FUNCTIONS=['_oo_obfuscate','_oo_last_error']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall']"
+    )
+    set_target_properties(openobfuscator_web PROPERTIES
+        OUTPUT_NAME openobfuscator
+        SUFFIX ".js"
+    )
 endif()
 
 include(CTest)

@@ -617,13 +617,14 @@ std::string base64Encode(const std::vector<uint8_t>& data) {
 
 std::string Obfuscator::buildBanner() {
     std::ostringstream ss;
-    ss << "-- Obfuscated by OpenObfuscator.us\n"
-       << "-- https://github.com/osk4rrv/openobfuscator \n"
-       << "-- https://openobfuscator.us/\n";
+    const char* comment = m_opts.language == Language::JavaScript ? "//" : "--";
+    ss << comment << " Obfuscated by OpenObfuscator.us\n"
+       << comment << " https://github.com/osk4rrv/openobfuscator \n"
+       << comment << " https://openobfuscator.us/\n";
     if (m_opts.preserveOpenObfuscatorStyle) {
-        ss << "-- local 1fh2034b = /245 /354 /451\n"
-           << "-- local 13tgf = {/344/245/143/46/256/14/1/145/148/146}\n"
-           << "-- local 3r33fd = {...}\n";
+        ss << comment << " local 1fh2034b = /245 /354 /451\n"
+           << comment << " local 13tgf = {/344/245/143/46/256/14/1/145/148/146}\n"
+           << comment << " local 3r33fd = {...}\n";
     }
     return ss.str();
 }
@@ -673,9 +674,10 @@ static uint32_t adler32(std::string_view source) {
     return (b << 16U) | a;
 }
 
-std::string Obfuscator::buildLuaJitSourceVm(std::string_view source) {
-    constexpr int FormatVersion = 1;
-    const uint8_t initialKey = static_cast<uint8_t>((randomByte() | 1U) & 0xFFU);
+Obfuscator::SourceVmProgram Obfuscator::buildSourceVmProgram(std::string_view source) {
+    SourceVmProgram vm {};
+    vm.initialKey = static_cast<uint8_t>((randomByte() | 1U) & 0xFFU);
+
     std::set<int> opSet;
     auto nextOp = [&]() {
         int value = 0;
@@ -686,42 +688,53 @@ std::string Obfuscator::buildLuaJitSourceVm(std::string_view source) {
         return value;
     };
 
-    const int opEmit = nextOp();
-    const int opMutate = nextOp();
-    const int opNoise = nextOp();
-    const int opHalt = nextOp();
-    std::vector<uint32_t> program;
-    program.reserve(source.size() + (source.size() / 9) + 9);
+    vm.opEmit = nextOp();
+    vm.opMutate = nextOp();
+    vm.opNoise = nextOp();
+    vm.opHalt = nextOp();
+    vm.words.reserve(source.size() + (source.size() / 9) + 9);
 
-    uint8_t key = initialKey;
+    uint8_t key = vm.initialKey;
     auto pushWord = [&](int op, int a, int b, int c) {
-        uint32_t word =
+        const uint32_t word =
             (static_cast<uint32_t>(op & 0xFF) << 24) |
             (static_cast<uint32_t>(a & 0xFF) << 16) |
             (static_cast<uint32_t>(b & 0xFF) << 8) |
             static_cast<uint32_t>(c & 0xFF);
-        program.push_back(word);
+        vm.words.push_back(word);
     };
 
     for (size_t i = 0; i < source.size(); ++i) {
         if ((i % 11) == 0) {
-            uint8_t a = randomByte();
-            uint8_t c = randomByte();
-            pushWord(opMutate, a, randomByte(), c);
+            const uint8_t a = randomByte();
+            const uint8_t c = randomByte();
+            pushWord(vm.opMutate, a, randomByte(), c);
             key = static_cast<uint8_t>(((key ^ a) + c) & 0xFFU);
         } else if ((i % 17) == 0) {
-            pushWord(opNoise, randomByte(), randomByte(), randomByte());
+            pushWord(vm.opNoise, randomByte(), randomByte(), randomByte());
         }
 
-        uint8_t plain = static_cast<uint8_t>(source[i]);
-        uint8_t pad = randomByte();
-        uint8_t encoded = static_cast<uint8_t>(plain ^ ((key + pad) & 0xFFU));
-        pushWord(opEmit, encoded, pad, randomByte());
-        uint32_t ip = static_cast<uint32_t>(program.size());
+        const uint8_t plain = static_cast<uint8_t>(source[i]);
+        const uint8_t pad = randomByte();
+        const uint8_t encoded = static_cast<uint8_t>(plain ^ ((key + pad) & 0xFFU));
+        pushWord(vm.opEmit, encoded, pad, randomByte());
+        const uint32_t ip = static_cast<uint32_t>(vm.words.size());
         key = static_cast<uint8_t>((key + pad + plain + ip) & 0xFFU);
     }
-    pushWord(opHalt, randomByte(), randomByte(), randomByte());
+    pushWord(vm.opHalt, randomByte(), randomByte(), randomByte());
+    return vm;
+}
 
+std::string Obfuscator::buildLuaJitSourceVm(std::string_view source) {
+    constexpr int FormatVersion = 1;
+    const SourceVmProgram vm = buildSourceVmProgram(source);
+
+    const uint8_t initialKey = vm.initialKey;
+    const int opEmit = vm.opEmit;
+    const int opMutate = vm.opMutate;
+    const int opNoise = vm.opNoise;
+    const int opHalt = vm.opHalt;
+    const std::vector<uint32_t>& program = vm.words;
     const std::string vBit = generateRandomName(10);
     const std::string vCode = generateRandomName(10);
     const std::string vOut = generateRandomName(10);
@@ -792,6 +805,82 @@ std::string Obfuscator::buildLuaJitSourceVm(std::string_view source) {
        << "if not " << vFn << " then error(\"load:vm \"..tostring(" << vErr << "),0)end\n"
        << "return " << vFn << "(...)\n"
        << "end)(...)\n";
+    return ss.str();
+}
+
+std::string Obfuscator::buildJavaScriptSourceVm(std::string_view source) {
+    constexpr int FormatVersion = 1;
+    const SourceVmProgram vm = buildSourceVmProgram(source);
+
+    const std::string vCode = generateRandomName(10);
+    const std::string vOut = generateRandomName(10);
+    const std::string vKey = generateRandomName(10);
+    const std::string vWord = generateRandomName(10);
+    const std::string vOp = generateRandomName(10);
+    const std::string vHalted = generateRandomName(10);
+    const std::string vBytes = generateRandomName(10);
+    const std::string vSrc = generateRandomName(10);
+    const std::string vAdlerA = generateRandomName(10);
+    const std::string vAdlerB = generateRandomName(10);
+    const std::string vAdler = generateRandomName(10);
+    const std::string vPercent = generateRandomName(10);
+    const std::string vRunner = generateRandomName(10);
+
+    std::ostringstream ss;
+    ss << "// OpenObfuscator JavaScript source VM format 1\n"
+       << "(function(){\n"
+       << "const _format=" << FormatVersion << ";\n"
+       << "if(_format!==1)throw new Error('integrity:vm');\n"
+       << "const " << vCode << "=[\n" << emitNumberList(vm.words) << "\n];\n"
+       << "const " << vOut << "=[];\n"
+       << "let " << vKey << "=" << static_cast<int>(vm.initialKey) << ";\n"
+       << "let " << vHalted << "=false;\n"
+       << "for(let ip=1;ip<=" << vCode << ".length;ip++){\n"
+       << "const " << vWord << "=" << vCode << "[ip-1]>>>0;\n"
+       << "const " << vOp << "=(" << vWord << ">>>24)&255;\n"
+       << "if(" << vHalted << ")throw new Error('integrity:vm');\n"
+       << "if(" << vOp << "===" << vm.opHalt << "){\n"
+       << vHalted << "=true;\n"
+       << "}else if(" << vOp << "===" << vm.opEmit << "){\n"
+       << "const e=(" << vWord << ">>>16)&255;\n"
+       << "const p=(" << vWord << ">>>8)&255;\n"
+       << "const c=e^((" << vKey << "+p)&255);\n"
+       << vOut << ".push(c);\n"
+       << vKey << "=(" << vKey << "+p+c+ip)&255;\n"
+       << "}else if(" << vOp << "===" << vm.opMutate << "){\n"
+       << "const a=(" << vWord << ">>>16)&255;\n"
+       << "const c=" << vWord << "&255;\n"
+       << vKey << "=( (" << vKey << "^a)+c )&255;\n"
+       << "}else if(" << vOp << "===" << vm.opNoise << "){\n"
+       << vKey << "=" << vKey << ";\n"
+       << "}else{throw new Error('integrity:vm');}\n"
+       << "}\n"
+       << "if(!" << vHalted << ")throw new Error('integrity:vm');\n"
+       << "const " << vBytes << "=new Uint8Array(" << vOut << ");\n"
+       << "if(" << vBytes << ".length!==" << source.size() << ")throw new Error('integrity:vm');\n"
+       << "let " << vAdlerA << "=1," << vAdlerB << "=0;\n"
+       << "for(let i=0;i<" << vBytes << ".length;i++){"
+       << vAdlerA << "=(" << vAdlerA << "+" << vBytes << "[i])%65521;"
+       << vAdlerB << "=(" << vAdlerB << "+" << vAdlerA << ")%65521;}\n"
+       << "const " << vAdler << "=((" << vAdlerB << "*65536)+" << vAdlerA << ")>>>0;\n"
+       << "if(" << vAdler << "!==" << adler32(source) << ")throw new Error('integrity:vm');\n"
+       << "let " << vSrc << ";\n"
+       << "if(typeof TextDecoder==='function'){"
+       << vSrc << "=new TextDecoder('utf-8',{fatal:true}).decode(" << vBytes << ");"
+       << "}else if(typeof Buffer==='function'){"
+       << vSrc << "=Buffer.from(" << vBytes << ").toString('utf8');"
+       << "}else{let " << vPercent << "='';for(const b of " << vBytes
+       << "){" << vPercent << "+='%'+b.toString(16).padStart(2,'0');}"
+       << vSrc << "=decodeURIComponent(" << vPercent << ");}\n"
+       << "if(typeof module==='object'&&module&&module.exports){\n"
+       << "const " << vRunner << "=Function('module','exports','require','__filename','__dirname'," << vSrc << ");\n"
+       << "return " << vRunner << ".call(module.exports,module,module.exports,"
+       << "typeof require==='function'?require:undefined,"
+       << "typeof __filename==='string'?__filename:undefined,"
+       << "typeof __dirname==='string'?__dirname:undefined);\n"
+       << "}\n"
+       << "return (0,eval)(" << vSrc << ");\n"
+       << "}).call(typeof globalThis!=='undefined'?globalThis:this);\n";
     return ss.str();
 }
 
@@ -1036,6 +1125,15 @@ std::string Obfuscator::recompose(const std::vector<Token>& tokens) {
 }
 
 std::string Obfuscator::obfuscate(std::string_view source) {
+    if (m_opts.language == Language::JavaScript) {
+        if (m_opts.virtualizeBytecode) {
+            return buildBanner() + buildJavaScriptSourceVm(source);
+        }
+        std::string output = buildBanner();
+        output.append(source.data(), source.size());
+        return output;
+    }
+
     if (m_opts.luaJitMode && m_opts.virtualizeBytecode) {
         std::string body;
         if (m_opts.preserveOpenObfuscatorStyle) {

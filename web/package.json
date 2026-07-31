@@ -1,0 +1,16 @@
+{
+  "name": "openobfuscator-web",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:engine": "bash scripts/build-engine.sh",
+    "build": "npm run build:engine && node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "wrangler": "4.116.0"
+  }
+}
