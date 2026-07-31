@@ -3,3 +3,6 @@
 /install/
 *.zip
 *.tar.gz
+/web/node_modules/
+/web/dist/
+/web/public/engine/

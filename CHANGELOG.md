@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Added support for JavaScript code.
+
 ## 1.1.0
 
 - Added source VM format 1 with a unique HALT opcode, strict program termination checks, reconstructed-source length validation, and Adler-32 integrity verification.

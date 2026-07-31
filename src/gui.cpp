@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <commdlg.h>
 
+#include <algorithm>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -95,15 +97,39 @@ void writeFile(const std::wstring& path, const std::string& content) {
     file << content;
 }
 
+bool isJavaScriptPath(const std::wstring& path) {
+    std::wstring extension = std::filesystem::path(path).extension().wstring();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](wchar_t c) {
+        return static_cast<wchar_t>(std::towlower(c));
+    });
+    return extension == L".js" || extension == L".cjs";
+}
+
+bool isEsmPath(const std::wstring& path) {
+    std::wstring extension = std::filesystem::path(path).extension().wstring();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](wchar_t c) {
+        return static_cast<wchar_t>(std::towlower(c));
+    });
+    return extension == L".mjs";
+}
+
+void updateLanguageControls() {
+    const bool lua = !isJavaScriptPath(getText(g_ui.input));
+    for (int id : {IdNumbers, IdStrings, IdRename, IdJunk, IdAntiDebug, IdCompress, IdLuaJit, IdStyle, IdFlatten}) {
+        EnableWindow(GetDlgItem(g_ui.window, id), lua ? TRUE : FALSE);
+    }
+}
+
 std::wstring openDialog(bool save) {
     wchar_t fileName[MAX_PATH] = {};
+    const bool javascript = save && isJavaScriptPath(getText(g_ui.input));
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g_ui.window;
-    ofn.lpstrFilter = L"Lua scripts (*.lua)\0*.lua\0All files (*.*)\0*.*\0";
+    ofn.lpstrFilter = L"Supported scripts (*.lua;*.js;*.cjs)\0*.lua;*.js;*.cjs\0Lua scripts (*.lua)\0*.lua\0JavaScript (*.js;*.cjs)\0*.js;*.cjs\0All files (*.*)\0*.*\0";
     ofn.lpstrFile = fileName;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrDefExt = L"lua";
+    ofn.lpstrDefExt = javascript ? L"js" : L"lua";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (save) {
         ofn.Flags |= OFN_OVERWRITEPROMPT;
@@ -130,8 +156,12 @@ void runObfuscation() {
         std::wstring inPath = getText(g_ui.input);
         std::wstring outPath = getText(g_ui.output);
         if (inPath.empty() || outPath.empty()) {
-            MessageBoxW(g_ui.window, L"Wybierz plik wejsciowy i wyjsciowy.", L"LuaObfuscator", MB_ICONWARNING);
+            MessageBoxW(g_ui.window, L"Wybierz plik wejsciowy i wyjsciowy.", L"OpenObfuscator", MB_ICONWARNING);
             return;
+        }
+
+        if (isEsmPath(inPath)) {
+            throw std::runtime_error("ECMAScript modules (.mjs) are not supported by the JavaScript source VM.");
         }
 
         ObfuscationOptions opts;
@@ -147,6 +177,10 @@ void runObfuscation() {
         opts.preserveOpenObfuscatorStyle = isChecked(IdStyle);
         opts.flattenControlFlow = isChecked(IdFlatten);
 
+        if (isJavaScriptPath(inPath)) {
+            opts.language = Language::JavaScript;
+        }
+
         std::wstring seedText = getText(g_ui.seed);
         if (!seedText.empty()) {
             if (!parseSeed(seedText, opts.seed)) {
@@ -154,7 +188,7 @@ void runObfuscation() {
             }
             opts.seedProvided = true;
         }
-        if (!opts.luaJitMode) {
+        if (opts.language == Language::Lua && !opts.luaJitMode) {
             opts.virtualizeBytecode = false;
         }
 
@@ -167,11 +201,11 @@ void runObfuscation() {
         std::wostringstream ok;
         ok << L"Gotowe: " << result.size() << L" bytes";
         setText(g_ui.status, ok.str());
-        MessageBoxW(g_ui.window, L"Obfuscation complete.", L"LuaObfuscator", MB_ICONINFORMATION);
+        MessageBoxW(g_ui.window, L"Obfuscation complete.", L"OpenObfuscator", MB_ICONINFORMATION);
     } catch (const std::exception& ex) {
         std::wstring message = widen(ex.what());
         setText(g_ui.status, L"Blad.");
-        MessageBoxW(g_ui.window, message.c_str(), L"LuaObfuscator", MB_ICONERROR);
+        MessageBoxW(g_ui.window, message.c_str(), L"OpenObfuscator", MB_ICONERROR);
     }
 }
 
@@ -192,9 +226,9 @@ void createUi(HWND hwnd) {
     g_ui.window = hwnd;
     g_ui.font = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
-    makeControl(L"STATIC", L"OpenObfuscator LuaJIT Source VM", SS_LEFT, 22, 16, 320, 26, 0);
-    makeControl(L"STATIC", L"Input Lua:", SS_LEFT, 22, 56, 105, 22, 0);
-    makeControl(L"STATIC", L"Output Lua:", SS_LEFT, 22, 90, 105, 22, 0);
+    makeControl(L"STATIC", L"OpenObfuscator LuaJIT & JavaScript Source VM", SS_LEFT, 22, 16, 400, 26, 0);
+    makeControl(L"STATIC", L"Input script:", SS_LEFT, 22, 56, 105, 22, 0);
+    makeControl(L"STATIC", L"Output script:", SS_LEFT, 22, 90, 105, 22, 0);
     g_ui.input = makeControl(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 140, 54, 500, 24, IdInput);
     g_ui.output = makeControl(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 140, 88, 500, 24, IdOutput);
     makeControl(L"BUTTON", L"...", BS_PUSHBUTTON | WS_TABSTOP, 650, 54, 48, 24, IdInputBrowse);
@@ -206,7 +240,7 @@ void createUi(HWND hwnd) {
     makeCheck(L"Junk code injection", 22, 170, 190, IdJunk, true);
     makeCheck(L"Anti-debug guards", 240, 170, 190, IdAntiDebug, true);
     makeCheck(L"Compress output", 458, 170, 190, IdCompress, true);
-    makeCheck(L"LuaJIT source VM", 22, 204, 190, IdVm, true);
+    makeCheck(L"Source VM wrapper", 22, 204, 190, IdVm, true);
     makeCheck(L"LuaJIT-only runtime", 240, 204, 190, IdLuaJit, true);
     makeCheck(L"OpenObfuscator style", 458, 204, 220, IdStyle, true);
     makeCheck(L"Control-flow flattening", 22, 238, 200, IdFlatten, false);
@@ -227,6 +261,10 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_COMMAND: {
             int id = LOWORD(wParam);
+            if (id == IdInput && HIWORD(wParam) == EN_CHANGE) {
+                updateLanguageControls();
+                return 0;
+            }
             if (id == IdInputBrowse) {
                 std::wstring path = openDialog(false);
                 if (!path.empty()) {
@@ -286,7 +324,7 @@ int runGui() {
 
     RegisterClassExW(&wc);
 
-    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT Source VM", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
+    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT & JavaScript Source VM", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
     if (!hwnd) return 1;
 
     MSG msg {};

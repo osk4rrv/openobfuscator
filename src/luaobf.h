@@ -11,7 +11,12 @@
 
 namespace luaobf {
 
-inline constexpr std::string_view Version = "1.1.0";
+inline constexpr std::string_view Version = "1.2.0";
+
+enum class Language : uint8_t {
+    Lua,
+    JavaScript
+};
 
 enum class TokenType : uint8_t {
     WHITESPACE,
@@ -51,6 +56,7 @@ struct ObfuscationOptions {
     bool compressWhitespace = true;
     uint32_t seed = 0;
     bool seedProvided = false;
+    Language language = Language::Lua;
 };
 
 class Obfuscator {
@@ -60,6 +66,15 @@ public:
     std::string obfuscate(std::string_view source);
 
 private:
+    struct SourceVmProgram {
+        uint8_t initialKey;
+        int opEmit;
+        int opMutate;
+        int opNoise;
+        int opHalt;
+        std::vector<uint32_t> words;
+    };
+
     ObfuscationOptions m_opts;
     std::mt19937_64 m_rng;
 
@@ -79,7 +94,9 @@ private:
     std::string buildBanner();
     std::string buildStylePrelude();
     std::string buildAntiDebugPrelude();
+    SourceVmProgram buildSourceVmProgram(std::string_view source);
     std::string buildLuaJitSourceVm(std::string_view source);
+    std::string buildJavaScriptSourceVm(std::string_view source);
     std::string generateRandomName(size_t len);
     std::string generateJunkCode();
 
