@@ -45,11 +45,12 @@ execute_process(
     RESULT_VARIABLE integrity_result
     OUTPUT_VARIABLE integrity_stdout
     ERROR_VARIABLE integrity_stderr
+    OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 if(NOT integrity_result EQUAL 0)
-    message(FATAL_ERROR "VM integrity test failed (${integrity_result}): ${integrity_stderr}")
+    message(FATAL_ERROR "Loader integrity test failed (${integrity_result}): ${integrity_stderr}")
 endif()
-if(NOT integrity_stdout STREQUAL "VM rejects unknown opcodes, invalid HALT flow, payload tampering, and wrong length\n")
+if(NOT integrity_stdout STREQUAL "Loader rejects unknown opcodes, invalid HALT flow, payload tampering, and wrong length")
     message(FATAL_ERROR "Unexpected integrity test output: [${integrity_stdout}]")
 endif()
 
