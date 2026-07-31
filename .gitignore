@@ -3,6 +3,8 @@
 /install/
 *.zip
 *.tar.gz
+__pycache__/
+*.py[cod]
 /web/node_modules/
 /web/dist/
 /web/public/engine/

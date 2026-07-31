@@ -52,8 +52,7 @@ const elements = {
   dropZone: document.querySelector("#drop-zone")
 };
 
-let worker;
-let engineReady = false;
+let serviceReady = false;
 let activeJob = 0;
 let activeRequest = null;
 let outputFileName = "openobfuscator-output.js";
@@ -93,11 +92,11 @@ function setMessage(text, state = "ready") {
 }
 
 function setBusy(busy) {
-  elements.obfuscate.disabled = busy || !engineReady;
+  elements.obfuscate.disabled = busy || !serviceReady;
   elements.obfuscate.querySelector("span").textContent = busy ? "Running native engine…" : "Obfuscate code";
   if (busy) {
     elements.outputStatus.textContent = "Processing";
-    setMessage("Generating a randomized source VM on this device", "busy");
+    setMessage("Generating a randomized source VM on the isolated service", "busy");
   }
 }
 
@@ -112,39 +111,29 @@ function resetOutput() {
 
 function invalidateActiveJob() {
   activeJob += 1;
+  activeRequest?.controller.abort();
   activeRequest = null;
   setBusy(false);
   resetOutput();
 }
 
-function createWorker() {
+async function checkService(attempt = 0) {
   try {
-    const instance = new Worker("obfuscation-worker.js");
-    instance.addEventListener("message", (event) => {
-      if (event.data.type === "ready") {
-        engineReady = true;
-        setBusy(false);
-        setMessage("Native OpenObfuscator V1.2 engine ready");
-        return;
-      }
-      if (event.data.type === "startup-error") {
-        setMessage(`Native engine failed to load: ${event.data.error}`, "error");
-        return;
-      }
-      handleWorkerResult(event.data);
-    });
-    instance.addEventListener("error", () => {
-      setBusy(false);
-      setMessage("The native WebAssembly engine could not start.", "error");
-    });
-    return instance;
+    const response = await fetch("/api/health", { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) throw new Error();
+    serviceReady = true;
+    setBusy(false);
+    setMessage("Isolated OpenObfuscator V1.2 service ready");
   } catch {
-    setMessage("The native WebAssembly engine requires an HTTP origin.", "error");
-    return null;
+    serviceReady = false;
+    setBusy(false);
+    const delay = Math.min(30_000, 1_000 * (2 ** Math.min(attempt, 5)));
+    setMessage(`The obfuscation service is unavailable. Retrying in ${Math.round(delay / 1000)}s…`, "error");
+    setTimeout(() => checkService(attempt + 1), delay);
   }
 }
 
-function handleWorkerResult({ id, code, error, duration }) {
+function handleApiResult({ id, code, error, duration }) {
   if (id !== activeJob || !activeRequest) return;
   const request = activeRequest;
   activeRequest = null;
@@ -163,7 +152,7 @@ function handleWorkerResult({ id, code, error, duration }) {
   outputFileName = request.outputFileName;
   elements.copy.disabled = false;
   elements.download.disabled = false;
-  setMessage("Protected by the native V1.2 engine — nothing was uploaded");
+  setMessage("Protected by the isolated native V1.2 engine — not intentionally stored");
 }
 
 function setLanguage(language, replaceSource = true) {
@@ -185,7 +174,7 @@ function setLanguage(language, replaceSource = true) {
   setMessage(`${isLua ? "LuaJIT" : "JavaScript"} source VM selected`);
 }
 
-function obfuscate() {
+async function obfuscate() {
   const source = elements.source.value;
   const size = byteLength(source);
   if (!source.trim()) {
@@ -194,17 +183,45 @@ function obfuscate() {
     return;
   }
   if (size > MAX_SOURCE_BYTES) {
-    setMessage(`The browser build accepts up to ${formatBytes(MAX_SOURCE_BYTES)}.`, "error");
+    setMessage(`The service accepts up to ${formatBytes(MAX_SOURCE_BYTES)}.`, "error");
     return;
   }
   activeJob += 1;
+  const id = activeJob;
   const language = selectedLanguage();
+  const controller = new AbortController();
   activeRequest = {
+    controller,
     sourceBytes: size,
     outputFileName: language === "lua" ? "openobfuscator-output.lua" : "openobfuscator-output.js"
   };
   setBusy(true);
-  worker.postMessage({ id: activeJob, source, language, preset: selectedPreset() });
+
+  const started = performance.now();
+  try {
+    const response = await fetch("/api/obfuscate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/plain" },
+      body: JSON.stringify({ source, language, preset: selectedPreset() }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      let message = "The source could not be obfuscated.";
+      try {
+        const payload = await response.json();
+        if (typeof payload.error === "string") message = payload.error;
+      } catch {
+        // Keep the generic public error when the response is malformed.
+      }
+      handleApiResult({ id, error: message });
+      return;
+    }
+    const code = await response.text();
+    const originDuration = Number(response.headers.get("X-Obfuscation-Duration-Ms"));
+    handleApiResult({ id, code, duration: originDuration > 0 ? originDuration : performance.now() - started });
+  } catch (error) {
+    if (error.name !== "AbortError") handleApiResult({ id, error: "The obfuscation service did not respond." });
+  }
 }
 
 function loadFile(file) {
@@ -215,7 +232,7 @@ function loadFile(file) {
     return;
   }
   if (file.size > MAX_SOURCE_BYTES) {
-    setMessage(`That file exceeds the ${formatBytes(MAX_SOURCE_BYTES)} browser limit.`, "error");
+    setMessage(`That file exceeds the ${formatBytes(MAX_SOURCE_BYTES)} service limit.`, "error");
     return;
   }
   const reader = new FileReader();
@@ -224,7 +241,7 @@ function loadFile(file) {
     elements.source.value = String(reader.result || "");
     outputFileName = file.name.replace(/\.(js|cjs|lua)$/i, ".protected.$1");
     updateSourceStats();
-    setMessage(`${file.name} loaded locally`);
+    setMessage(`${file.name} loaded`);
   });
   reader.addEventListener("error", () => setMessage("The file could not be read.", "error"));
   reader.readAsText(file);
@@ -292,5 +309,5 @@ elements.dropZone.addEventListener("drop", (event) => loadFile(event.dataTransfe
 document.querySelector("#current-year").textContent = new Date().getFullYear();
 updateSourceStats();
 resetOutput();
-worker = createWorker();
+checkService();
 setInterval(rotateHero, 3200);

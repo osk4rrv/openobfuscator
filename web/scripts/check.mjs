@@ -4,9 +4,6 @@ const required = [
   "dist/index.html",
   "dist/styles.css",
   "dist/app.js",
-  "dist/obfuscation-worker.js",
-  "dist/engine/openobfuscator.js",
-  "dist/engine/openobfuscator.wasm",
   "dist/mark.svg"
 ];
 await Promise.all(required.map((file) => access(file)));
