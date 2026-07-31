@@ -15,14 +15,16 @@ openobfuscator-origin.syntaxlua.xyz {
             roll_keep 3
         }
         format filter {
-            request>headers>Cf-Connecting-Ip delete
-            request>headers>Cf-Connecting-Ipv6 delete
-            request>headers>Cf-Pseudo-Ipv4 delete
-            request>headers>True-Client-Ip delete
-            request>headers>X-Forwarded-For delete
-            request>headers>X-Real-Ip delete
-            request>headers>X-Client-Ip delete
-            request>headers>X-Client-Id delete
+            fields {
+                request>headers>Cf-Connecting-Ip delete
+                request>headers>Cf-Connecting-Ipv6 delete
+                request>headers>Cf-Pseudo-Ipv4 delete
+                request>headers>True-Client-Ip delete
+                request>headers>X-Forwarded-For delete
+                request>headers>X-Real-Ip delete
+                request>headers>X-Client-Ip delete
+                request>headers>X-Client-Id delete
+            }
             wrap json
         }
     }
