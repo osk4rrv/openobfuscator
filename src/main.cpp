@@ -31,7 +31,7 @@ static void printUsage(const char* prog) {
               << "  --no-junk         Disable junk code injection\n"
               << "  --no-antidebug    Disable anti-debug code\n"
               << "  --no-compress     Keep whitespace and comments\n"
-              << "  --no-vm           Disable the source VM wrapper\n"
+              << "  --no-vm           Disable the encoded source loader wrapper\n"
               << "  --no-luajit       Disable LuaJIT-only output for Lua input\n"
               << "  --no-style        Disable OpenObfuscator.us style banner/prelude\n"
               << "  --flatten         Enable control flow flattening\n"
@@ -209,7 +209,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (lowercase(fs::path(inputFile).extension().string()) == ".mjs") {
-        std::cerr << "Error: ECMAScript modules (.mjs) are not supported by the JavaScript source VM.\n";
+        std::cerr << "Error: ECMAScript modules (.mjs) are not supported by the JavaScript encoded source loader.\n";
         return 1;
     }
 

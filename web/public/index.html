@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Obfuscate JavaScript and LuaJIT with the native OpenObfuscator V1.2 engine on an isolated service.">
+  <meta name="description" content="Open-source JavaScript and LuaJIT obfuscator powered by OpenObfuscator 1.3.">
   <meta name="theme-color" content="#0c0f0d">
-  <meta property="og:title" content="OpenObfuscator V1.2 — JavaScript & LuaJIT">
-  <meta property="og:description" content="Native C++ source-VM obfuscation through a secured, isolated processing service.">
+  <meta property="og:title" content="OpenObfuscator V1.3 — JavaScript & LuaJIT">
+  <meta property="og:description" content="Obfuscate JavaScript and LuaJIT source with the native OpenObfuscator engine.">
   <meta property="og:type" content="website">
-  <title>OpenObfuscator V1.2 — JavaScript & LuaJIT</title>
+  <title>OpenObfuscator V1.3 — JavaScript & LuaJIT</title>
   <link rel="icon" href="mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -17,47 +17,44 @@
   <a class="skip-link" href="#workspace">Skip to obfuscator</a>
   <header class="site-header">
     <a class="brand" href="#top" aria-label="OpenObfuscator home"><span class="brand-mark" aria-hidden="true">O</span><span>OpenObfuscator</span></a>
-    <nav aria-label="Primary navigation"><a href="#workspace">Obfuscator</a><a href="#engine">Engine</a><a href="#about">About</a></nav>
+    <nav aria-label="Primary navigation"><a href="#workspace">Obfuscator</a><a href="#engine">How it works</a><a href="#about">About</a></nav>
     <a class="header-link" href="https://github.com/osk4rrv/openobfuscator" target="_blank" rel="noreferrer">GitHub <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
   </header>
 
   <main id="top">
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow"><span></span> Native engine · V1.2</p>
-        <h1 id="hero-title">Ship <span class="rotating-language" id="hero-language">JavaScript</span>.<br><em>Not your source.</em></h1>
-        <p>OpenObfuscator turns readable JavaScript and Lua into randomized source-VM programs. Cloudflare serves the interface while an isolated native C++ service processes each job without application-level source storage.</p>
+        <p class="eyebrow"><span></span> OpenObfuscator · V1.3</p>
+        <h1 id="hero-title">Obfuscate <span class="rotating-language" id="hero-language">JavaScript</span>.<br><em>Download the result.</em></h1>
+        <p>Paste a script or open a file. The server runs the native OpenObfuscator engine and returns an encoded loader for JavaScript or LuaJIT.</p>
         <div class="hero-actions">
-          <a class="button primary" href="#workspace">Obfuscate code <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a>
-          <a class="text-link" href="#engine">How the VM works <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v11m0 0 4-4m-4 4L4 9"/></svg></a>
+          <a class="button primary" href="#workspace">Open obfuscator <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a>
+          <a class="text-link" href="#engine">How it works <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v11m0 0 4-4m-4 4L4 9"/></svg></a>
         </div>
       </div>
-      <div class="hero-terminal" aria-label="Source VM preview">
-        <div class="terminal-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="preview-file">checkout.js</span><span class="status"><i></i> isolated native</span></div>
+      <div class="hero-terminal" aria-label="Obfuscation preview">
+        <div class="terminal-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="preview-file">checkout.js</span><span class="status"><i></i> C++ backend</span></div>
         <pre id="preview-source"><span>01</span> const cart = [{ price: 89 }, { price: 42 }];
 <span>02</span> const total = cart.reduce((sum, item) =&gt;
 <span>03</span>   sum + item.price, 0);
 <span>04</span> console.log(total);</pre>
-        <div class="terminal-rule"><span>NATIVE SOURCE VM</span></div>
-        <pre class="encoded"><span>01</span> const l7h9p2=[3154778432,1919246080,
-<span>02</span> 3187724911,2046151168,3910384720];
-<span>03</span> for(let ip=1;ip&lt;=l7h9p2.length;ip++){
-<span>04</span>   const op=(l7h9p2[ip-1]&gt;&gt;&gt;24)&amp;255;</pre>
-        <div class="terminal-foot"><span>randomized opcodes</span><span>no app-level storage</span></div>
+        <div class="terminal-rule"><span>OUTPUT</span></div>
+        <div class="terminal-result"><strong>Generated file ready</strong><span>Randomized encoding · integrity checks · no watermark</span></div>
+        <div class="terminal-foot"><span>randomized encoding</span><span>temporary processing</span></div>
       </div>
     </section>
 
     <section class="facts" aria-label="Product facts">
       <div><strong>C++17</strong><span>native core</span></div>
-      <div><strong>VPS</strong><span>isolated runtime</span></div>
+      <div><strong>3</strong><span>uses per hour</span></div>
       <div><strong>2</strong><span>languages</span></div>
       <div><strong>MIT</strong><span>open source</span></div>
     </section>
 
     <section class="tool-section shell" id="workspace" aria-labelledby="workspace-title">
       <div class="section-heading">
-        <div><p class="eyebrow"><span></span> Workspace</p><h2 id="workspace-title">One engine.<br>Two runtimes.</h2></div>
-        <p>Choose JavaScript or LuaJIT, paste a script, and export a protected source-VM wrapper. Source is transmitted over HTTPS and used only for the request; the application does not intentionally retain request bodies or results.</p>
+        <div><p class="eyebrow"><span></span> Obfuscator</p><h2 id="workspace-title">Obfuscate<br>a script.</h2></div>
+        <p>Select JavaScript or LuaJIT, paste source or open a file, then copy or save the generated output. The application does not intentionally keep source or results after the request.</p>
       </div>
 
       <div class="workspace-shell">
@@ -69,7 +66,7 @@
           </fieldset>
           <fieldset class="segmented preset-group">
             <legend>Protection</legend>
-            <label><input type="radio" name="preset" value="standard" checked><span id="standard-preset-label">Source VM</span></label>
+            <label><input type="radio" name="preset" value="standard" checked><span id="standard-preset-label">Encoded loader</span></label>
             <label><input type="radio" name="preset" value="hardened" disabled><span>Hardened</span></label>
             <label><input type="radio" name="preset" value="maximum" disabled><span>Maximum</span></label>
           </fieldset>
@@ -103,7 +100,7 @@ console.log(`Total: $${calculateTotal(cart)}`);</textarea>
 
           <section class="editor-panel output-panel" aria-labelledby="output-label">
             <div class="editor-header">
-              <div><span>Output</span><h3 id="output-label">Protected JavaScript</h3></div>
+              <div><span>Output</span><h3 id="output-label">Obfuscated JavaScript</h3></div>
               <div class="editor-actions">
                 <button type="button" id="copy-button" disabled><svg viewBox="0 0 18 18" aria-hidden="true"><rect x="6" y="6" width="8" height="9" rx="1"/><path d="M12 6V3H4a1 1 0 0 0-1 1v8h3"/></svg><span>Copy</span></button>
                 <button type="button" id="download-button" disabled><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v9m0 0 3-3m-3 3L6 9M3 15h12"/></svg><span>Save</span></button>
@@ -111,39 +108,42 @@ console.log(`Total: $${calculateTotal(cart)}`);</textarea>
             </div>
             <div class="textarea-wrap output-wrap">
               <textarea id="output-code" aria-label="Obfuscated output" readonly spellcheck="false" wrap="off"></textarea>
-              <div class="output-empty" id="output-empty" aria-hidden="true"><span>{<i>/</i>}</span><strong>Native service ready.</strong><small>JavaScript and LuaJIT run in an isolated VPS process.</small></div>
+              <div class="output-empty" id="output-empty" aria-hidden="true"><span>{<i>/</i>}</span><strong>Output appears here.</strong><small>Run the obfuscator to generate a file.</small></div>
             </div>
             <div class="editor-meta"><span id="output-status">Waiting for input</span><span id="output-size">—</span></div>
           </section>
         </div>
         <div class="workspace-footer">
-          <p id="tool-message" role="status" aria-live="polite"><span></span> Connecting to isolated service…</p>
+          <div class="workspace-status">
+            <p id="tool-message" role="status" aria-live="polite"><span></span> Connecting to service…</p>
+            <p class="consent-note">By clicking <strong>Obfuscate code</strong>, you agree that your IP address and cookie identifier may be stored for one hour after your latest request to enforce the limit of 3 successful generations per rolling hour.</p>
+          </div>
           <button id="obfuscate-button" type="button" disabled><span>Obfuscate code</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-4-4m4 4-4 4"/></svg></button>
         </div>
       </div>
-      <p class="tool-note">JavaScript source-VM output targets CommonJS and classic scripts that do not depend on persistent top-level lexical bindings. ECMAScript modules are not supported. Lua source-VM output requires LuaJIT and its bit API.</p>
+      <p class="tool-note">Each successfully generated output uses one of three rolling-hour tokens. JavaScript output targets CommonJS and classic scripts; ECMAScript modules are not supported. Lua output requires LuaJIT and its bit API.</p>
     </section>
 
     <section class="engine-section" id="engine" aria-labelledby="engine-title">
       <div class="shell engine-inner">
-        <div class="engine-copy"><p class="eyebrow light"><span></span> The actual V1.2 engine</p><h2 id="engine-title">Not a lookalike.<br>The native core.</h2><p>The website calls the same C++ implementation distributed by the GitHub project. Each request runs the native CLI as a short-lived process under a dedicated, restricted VPS account; the application does not intentionally persist submitted source or generated output.</p><a class="button light" href="https://github.com/osk4rrv/openobfuscator" target="_blank" rel="noreferrer">Read the source <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a></div>
+        <div class="engine-copy"><p class="eyebrow light"><span></span> How it works</p><h2 id="engine-title">Source in.<br>Loader out.</h2><p>The server runs the project’s C++ binary, encodes the source into randomized data, and returns a language-specific loader. This is source obfuscation, not encryption or bytecode.</p><a class="button light" href="https://github.com/osk4rrv/openobfuscator" target="_blank" rel="noreferrer">Read the source <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a></div>
         <div class="engine-steps">
-          <article><span>01</span><div><h3>Randomized instruction set</h3><p>Every run assigns new opcodes for byte emission, key mutation, noise, and HALT.</p></div></article>
-          <article><span>02</span><div><h3>Integrity before execution</h3><p>The runtime checks HALT flow, reconstructed byte length, and Adler-32 before loading source.</p></div></article>
-          <article><span>03</span><div><h3>Language-specific runtime</h3><p>The shared instruction stream emits a LuaJIT loader or a modern JavaScript wrapper.</p></div></article>
+          <article><span>01</span><div><h3>Transform</h3><p>Lua presets can rename locals, rewrite literals, add junk statements, and add optional guards.</p></div></article>
+          <article><span>02</span><div><h3>Encode</h3><p>The source is stored as randomized numeric data and reconstructed by a generated JavaScript or Lua loader.</p></div></article>
+          <article><span>03</span><div><h3>Verify</h3><p>The loader checks its data length, termination marker, and Adler-32 checksum before running the source.</p></div></article>
         </div>
       </div>
     </section>
 
     <section class="about-section shell" id="about" aria-labelledby="about-title">
-      <div><p class="eyebrow"><span></span> Open by default</p><h2 id="about-title">Inspect every layer.</h2></div>
-      <p>OpenObfuscator is MIT-licensed, has no account system, and adds no watermark. Obfuscation increases reverse-engineering cost; it does not turn client-side secrets into safe data.</p>
+      <div><p class="eyebrow"><span></span> Open source</p><h2 id="about-title">Read the code.</h2></div>
+      <p>OpenObfuscator is MIT-licensed and adds no watermark. Obfuscation can slow down casual analysis, but it cannot make secrets embedded in client-side code safe.</p>
     </section>
   </main>
 
   <footer>
-    <div class="footer-main"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">O</span><span>OpenObfuscator</span></a><p>JavaScript &amp; LuaJIT.<br>Native, isolated, open.</p><a href="#workspace">Protect your code <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a></div>
-    <div class="footer-bottom"><span>© <span id="current-year">2026</span> OpenObfuscator</span><span>Engine V1.2 · C++17 / VPS</span><a class="footer-top" href="#top">Back to top <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V3m0 0 4 4M8 3 4 7"/></svg></a></div>
+    <div class="footer-main"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">O</span><span>OpenObfuscator</span></a><p>JavaScript &amp; LuaJIT.<br>Open-source obfuscation.</p><a href="#workspace">Open obfuscator <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4h8v8M12 4 4 12"/></svg></a></div>
+    <div class="footer-bottom"><span>© <span id="current-year">2026</span> OpenObfuscator</span><span>Engine V1.3 · C++17</span><a class="footer-top" href="#top">Back to top <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14V3m0 0 4 4M8 3 4 7"/></svg></a></div>
   </footer>
   <noscript><div class="noscript">JavaScript is required to use the obfuscation service.</div></noscript>
 </body>

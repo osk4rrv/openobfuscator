@@ -1,6 +1,7 @@
 /build/
 /build-*/
 /install/
+/dist/
 *.zip
 *.tar.gz
 __pycache__/

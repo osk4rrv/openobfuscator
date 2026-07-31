@@ -1,4 +1,3 @@
-const MAX_SOURCE_BYTES = 500_000;
 const samples = {
   javascript: `const cart = [
   { name: "Keyboard", price: 89 },
@@ -96,7 +95,7 @@ function setBusy(busy) {
   elements.obfuscate.querySelector("span").textContent = busy ? "Running native engine…" : "Obfuscate code";
   if (busy) {
     elements.outputStatus.textContent = "Processing";
-    setMessage("Generating a randomized source VM on the isolated service", "busy");
+    setMessage("Encoding source on the native service", "busy");
   }
 }
 
@@ -123,7 +122,7 @@ async function checkService(attempt = 0) {
     if (!response.ok) throw new Error();
     serviceReady = true;
     setBusy(false);
-    setMessage("Isolated OpenObfuscator V1.2 service ready");
+    setMessage("Isolated OpenObfuscator V1.3 service ready");
   } catch {
     serviceReady = false;
     setBusy(false);
@@ -133,7 +132,7 @@ async function checkService(attempt = 0) {
   }
 }
 
-function handleApiResult({ id, code, error, duration }) {
+function handleApiResult({ id, code, error, duration, remaining }) {
   if (id !== activeJob || !activeRequest) return;
   const request = activeRequest;
   activeRequest = null;
@@ -152,26 +151,26 @@ function handleApiResult({ id, code, error, duration }) {
   outputFileName = request.outputFileName;
   elements.copy.disabled = false;
   elements.download.disabled = false;
-  setMessage("Protected by the isolated native V1.2 engine — not intentionally stored");
+  setMessage(`Done — ${Number.isInteger(remaining) ? remaining : "?"} of 3 uses left this hour`);
 }
 
 function setLanguage(language, replaceSource = true) {
   const isLua = language === "lua";
   document.querySelector(`input[name="language"][value="${language}"]`).checked = true;
-  document.querySelector("#standard-preset-label").textContent = isLua ? "Standard" : "Source VM";
+  document.querySelector("#standard-preset-label").textContent = isLua ? "Standard" : "Encoded loader";
   document.querySelectorAll('input[name="preset"]').forEach((input) => {
     input.disabled = !isLua && input.value !== "standard";
   });
   if (!isLua) document.querySelector('input[name="preset"][value="standard"]').checked = true;
   elements.sourceLabel.textContent = isLua ? "Source LuaJIT" : "Source JavaScript";
-  elements.outputLabel.textContent = isLua ? "Protected LuaJIT" : "Protected JavaScript";
+  elements.outputLabel.textContent = isLua ? "Obfuscated LuaJIT" : "Obfuscated JavaScript";
   elements.source.setAttribute("aria-label", isLua ? "Source LuaJIT" : "Source JavaScript");
   elements.fileInput.accept = isLua ? ".lua,text/x-lua" : ".js,.cjs,text/javascript,application/javascript";
   outputFileName = isLua ? "openobfuscator-output.lua" : "openobfuscator-output.js";
   if (replaceSource) elements.source.value = samples[language];
   invalidateActiveJob();
   updateSourceStats();
-  setMessage(`${isLua ? "LuaJIT" : "JavaScript"} source VM selected`);
+  setMessage(`${isLua ? "LuaJIT" : "JavaScript"} selected`);
 }
 
 async function obfuscate() {
@@ -182,10 +181,6 @@ async function obfuscate() {
     elements.source.focus();
     return;
   }
-  if (size > MAX_SOURCE_BYTES) {
-    setMessage(`The service accepts up to ${formatBytes(MAX_SOURCE_BYTES)}.`, "error");
-    return;
-  }
   activeJob += 1;
   const id = activeJob;
   const language = selectedLanguage();
@@ -193,7 +188,7 @@ async function obfuscate() {
   activeRequest = {
     controller,
     sourceBytes: size,
-    outputFileName: language === "lua" ? "openobfuscator-output.lua" : "openobfuscator-output.js"
+    outputFileName
   };
   setBusy(true);
 
@@ -201,8 +196,13 @@ async function obfuscate() {
   try {
     const response = await fetch("/api/obfuscate", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/plain" },
-      body: JSON.stringify({ source, language, preset: selectedPreset() }),
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        Accept: "text/plain",
+        "X-OpenObfuscator-Language": language,
+        "X-OpenObfuscator-Preset": String(selectedPreset())
+      },
+      body: source,
       signal: controller.signal
     });
     if (!response.ok) {
@@ -218,7 +218,13 @@ async function obfuscate() {
     }
     const code = await response.text();
     const originDuration = Number(response.headers.get("X-Obfuscation-Duration-Ms"));
-    handleApiResult({ id, code, duration: originDuration > 0 ? originDuration : performance.now() - started });
+    const remaining = Number(response.headers.get("X-RateLimit-Remaining"));
+    handleApiResult({
+      id,
+      code,
+      duration: originDuration > 0 ? originDuration : performance.now() - started,
+      remaining: Number.isInteger(remaining) ? remaining : undefined
+    });
   } catch (error) {
     if (error.name !== "AbortError") handleApiResult({ id, error: "The obfuscation service did not respond." });
   }
@@ -229,10 +235,6 @@ function loadFile(file) {
   const language = file.name.toLowerCase().endsWith(".lua") ? "lua" : file.name.match(/\.(?:js|cjs)$/i) ? "javascript" : null;
   if (!language) {
     setMessage("Choose a .js, .cjs, or .lua file.", "error");
-    return;
-  }
-  if (file.size > MAX_SOURCE_BYTES) {
-    setMessage(`That file exceeds the ${formatBytes(MAX_SOURCE_BYTES)} service limit.`, "error");
     return;
   }
   const reader = new FileReader();
@@ -247,13 +249,36 @@ function loadFile(file) {
   reader.readAsText(file);
 }
 
+function showActionSuccess(button, text) {
+  const label = button.querySelector("span");
+  const original = button.dataset.defaultLabel || label.textContent;
+  button.dataset.defaultLabel = original;
+  clearTimeout(button.feedbackTimer);
+  label.textContent = text;
+  button.classList.remove("is-success");
+  void button.offsetWidth;
+  button.classList.add("is-success");
+  button.feedbackTimer = setTimeout(() => {
+    label.textContent = original;
+    button.classList.remove("is-success");
+  }, 1300);
+}
+
 async function copyOutput() {
   if (!elements.output.value) return;
-  try { await navigator.clipboard.writeText(elements.output.value); }
-  catch { elements.output.select(); document.execCommand("copy"); }
-  const label = elements.copy.querySelector("span");
-  label.textContent = "Copied";
-  setTimeout(() => { label.textContent = "Copy"; }, 1200);
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(elements.output.value);
+    copied = true;
+  } catch {
+    elements.output.select();
+    copied = document.execCommand("copy");
+  }
+  if (!copied) {
+    setMessage("Copy failed. Select the output and copy it manually.", "error");
+    return;
+  }
+  showActionSuccess(elements.copy, "Copied");
 }
 
 function downloadOutput() {
@@ -265,6 +290,7 @@ function downloadOutput() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  showActionSuccess(elements.download, "Saved");
 }
 
 function rotateHero() {
@@ -281,7 +307,7 @@ function rotateHero() {
 document.querySelectorAll('input[name="language"]').forEach((input) => input.addEventListener("change", () => setLanguage(input.value)));
 document.querySelectorAll('input[name="preset"]').forEach((input) => input.addEventListener("change", () => {
   invalidateActiveJob();
-  setMessage(`${input.value[0].toUpperCase()}${input.value.slice(1)} native VM profile selected`);
+  setMessage(`${input.value[0].toUpperCase()}${input.value.slice(1)} protection preset selected`);
 }));
 elements.source.addEventListener("input", () => {
   updateSourceStats();

@@ -49,13 +49,13 @@ int main() {
     expect(zeroA == zeroB, "an explicitly provided seed 0 must be deterministic");
     expect(zeroA != other, "different seeds must produce different output");
     expect(legacyA == legacyB, "a legacy nonzero seed must remain deterministic without seedProvided");
-    expect(contains(zeroA, "OpenObfuscator source VM format 1"), "VM format marker is missing");
-    expect(contains(zeroA, "integrity:vm"), "VM integrity failure marker is missing");
+    expect(contains(zeroA, "OpenObfuscator encoded loader format 1"), "loader format marker is missing");
+    expect(contains(zeroA, "integrity:loader"), "loader integrity failure marker is missing");
     expect(contains(zeroA, "integrity:luajit"), "LuaJIT validation marker is missing");
     expect(contains(zeroA, "pcall(require,'bit')"), "safe bit module fallback is missing");
     expect(contains(zeroA, "%65521"), "Adler-32 validation is missing");
-    expect(contains(zeroA, "~=10 then error(\"integrity:vm\""), "exact source length validation is missing");
-    expect(contains(zeroA, "@openobfuscator-vm"), "source VM chunk name is missing");
+    expect(contains(zeroA, "~=10 then error(\"integrity:loader\""), "exact source length validation is missing");
+    expect(contains(zeroA, "@openobfuscator-loader"), "encoded loader chunk name is missing");
 
     std::smatch haltState;
     const bool hasHaltState = std::regex_search(zeroA, haltState,
@@ -63,9 +63,9 @@ int main() {
     expect(hasHaltState, "HALT state is missing");
     if (hasHaltState) {
         const std::string state = haltState[1].str();
-        expect(contains(zeroA, "if " + state + " then error(\"integrity:vm\""),
+        expect(contains(zeroA, "if " + state + " then error(\"integrity:loader\""),
             "instructions after HALT are not rejected");
-        expect(contains(zeroA, "if not " + state + " then error(\"integrity:vm\""),
+        expect(contains(zeroA, "if not " + state + " then error(\"integrity:loader\""),
             "missing HALT is not rejected");
     }
 

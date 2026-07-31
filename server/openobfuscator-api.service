@@ -38,6 +38,8 @@ Nice=10
 TasksMax=8
 LimitNOFILE=64
 LimitCORE=0
+StateDirectory=openobfuscator
+StateDirectoryMode=0700
 RuntimeDirectory=openobfuscator
 RuntimeDirectoryMode=0700
 
