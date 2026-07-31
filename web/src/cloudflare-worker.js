@@ -77,7 +77,7 @@ async function originFetch(env, path, init = {}) {
 function healthResponse(env) {
   if (!configured(env)) return errorResponse(503, "Service is not configured");
   return Response.json(
-    { status: "ok", service: "openobfuscator", version: "1.2.0", languages: ["javascript", "luajit"] },
+    { status: "ok", service: "openobfuscator", version: "1.3.0", languages: ["javascript", "luajit"] },
     { headers: apiHeaders() }
   );
 }

@@ -122,7 +122,7 @@ async function checkService(attempt = 0) {
     if (!response.ok) throw new Error();
     serviceReady = true;
     setBusy(false);
-    setMessage("Isolated OpenObfuscator V1.2 service ready");
+    setMessage("Isolated OpenObfuscator V1.3 service ready");
   } catch {
     serviceReady = false;
     setBusy(false);

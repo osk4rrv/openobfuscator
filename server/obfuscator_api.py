@@ -201,7 +201,7 @@ def set_child_limits() -> None:
 
 
 class ObfuscatorHandler(BaseHTTPRequestHandler):
-    server_version = "OpenObfuscatorAPI/1.0"
+    server_version = "OpenObfuscatorAPI/1.3.0"
     sys_version = ""
 
     def send_bytes(
@@ -246,7 +246,7 @@ class ObfuscatorHandler(BaseHTTPRequestHandler):
             return
         if not self.require_authorization():
             return
-        self.send_json(HTTPStatus.OK, {"status": "ok", "service": "openobfuscator-origin", "version": "1.2.0"})
+        self.send_json(HTTPStatus.OK, {"status": "ok", "service": "openobfuscator-origin", "version": "1.3.0"})
 
     def read_exact_chunks(self, size: int):
         remaining = size

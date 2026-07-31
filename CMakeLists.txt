@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(OpenObfuscator VERSION 1.2.0 LANGUAGES CXX)
+project(OpenObfuscator VERSION 1.3.0 LANGUAGES CXX)
 
 add_library(openobfuscator_core
     src/luaobf.cpp

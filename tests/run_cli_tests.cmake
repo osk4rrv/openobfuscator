@@ -8,7 +8,7 @@ execute_process(
     OUTPUT_VARIABLE version_stdout
     ERROR_VARIABLE version_stderr
 )
-if(NOT version_result EQUAL 0 OR NOT version_stdout STREQUAL "OpenObfuscator 1.2.0\n" OR NOT version_stderr STREQUAL "")
+if(NOT version_result EQUAL 0 OR NOT version_stdout STREQUAL "OpenObfuscator 1.3.0\n" OR NOT version_stderr STREQUAL "")
     message(FATAL_ERROR "--version contract failed: ${version_result} [${version_stdout}] [${version_stderr}]")
 endif()
 

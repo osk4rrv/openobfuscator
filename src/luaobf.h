@@ -11,7 +11,7 @@
 
 namespace luaobf {
 
-inline constexpr std::string_view Version = "1.2.0";
+inline constexpr std::string_view Version = "1.3.0";
 
 enum class Language : uint8_t {
     Lua,

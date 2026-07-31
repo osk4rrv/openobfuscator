@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- Added the production Cloudflare web application and isolated VPS obfuscation service for JavaScript and LuaJIT.
+- Added persistent three-success rolling-hour allowances tracked independently by IP and a one-hour cookie.
+- Removed application-defined input and output byte caps, with raw source and generated output streaming through temporary files.
+- Replaced misleading VM terminology with encoded-loader wording and improved the consent, output, copy, and save interface states.
+
 ## 1.2.0
 
 - Added support for JavaScript code.

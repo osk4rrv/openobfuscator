@@ -1,6 +1,6 @@
 # OpenObfuscator
 
-OpenObfuscator 1.2.0 is a dependency-free C++17 source obfuscator for Lua/LuaJIT and JavaScript. By default it encodes source bytes as randomized 32-bit values and emits a language-specific loader. The loader verifies its termination marker, byte length, and Adler-32 checksum before running the reconstructed source.
+OpenObfuscator 1.3.0 is a dependency-free C++17 source obfuscator for Lua/LuaJIT and JavaScript. By default it encodes source bytes as randomized 32-bit values and emits a language-specific loader. The loader verifies its termination marker, byte length, and Adler-32 checksum before running the reconstructed source.
 
 ## Supported runtimes
 
@@ -47,7 +47,7 @@ If no output file is specified, generated code is written to stdout. Main option
 - `--no-luajit`: produce Lua output that does not require LuaJIT; JavaScript output is unaffected.
 - `--flatten`: enable the existing Lua control-flow flattening option.
 - `--gui`: open the Windows graphical interface.
-- `--version`: print `1.2.0`.
+- `--version`: print `1.3.0`.
 - `-h`, `--help`: show all options.
 
 Seeds are parsed as complete decimal values from `0` through `4294967295`; partial, negative, and overflowing values are rejected.
