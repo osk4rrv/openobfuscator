@@ -470,10 +470,13 @@ class ObfuscatorHandler(BaseHTTPRequestHandler):
             LOGGER.warning("Obfuscation timed out after %ss", PROCESS_TIMEOUT_SECONDS)
             self.send_json(HTTPStatus.GATEWAY_TIMEOUT, {"error": "Obfuscation timed out"}, allowance_headers)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            self.close_connection = True
             LOGGER.info("Client disconnected or timed out while receiving obfuscated output")
         except OSError:
             LOGGER.exception("Could not run the obfuscator binary or transfer its output")
-            if not response_started:
+            if response_started:
+                self.close_connection = True
+            else:
                 self.send_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {"error": "Obfuscation service is unavailable"},
