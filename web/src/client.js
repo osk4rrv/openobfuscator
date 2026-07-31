@@ -24,15 +24,13 @@ end
 print("Total: $" .. calculateTotal(cart))`
 };
 
-const preview = {
-  javascript: { label: "JavaScript", file: "checkout.js", code: `<span>01</span> const cart = [{ price: 89 }, { price: 42 }];\n<span>02</span> const total = cart.reduce((sum, item) =&gt;\n<span>03</span>   sum + item.price, 0);\n<span>04</span> console.log(total);` },
-  lua: { label: "LuaJIT", file: "checkout.lua", code: `<span>01</span> local cart = {{ price = 89 }, { price = 42 }}\n<span>02</span> local total = 0\n<span>03</span> for _, item in ipairs(cart) do\n<span>04</span>   total = total + item.price end` }
+const rotatingLabels = {
+  javascript: "JavaScript",
+  lua: "LuaJIT"
 };
 
 const elements = {
   heroLanguage: document.querySelector("#hero-language"),
-  previewFile: document.querySelector("#preview-file"),
-  previewSource: document.querySelector("#preview-source"),
   source: document.querySelector("#source-code"),
   output: document.querySelector("#output-code"),
   sourceLabel: document.querySelector("#source-label"),
@@ -49,7 +47,9 @@ const elements = {
   upload: document.querySelector("#upload-button"),
   clear: document.querySelector("#clear-button"),
   fileInput: document.querySelector("#file-input"),
-  dropZone: document.querySelector("#drop-zone")
+  dropZone: document.querySelector("#drop-zone"),
+  preset: document.querySelector("#preset-select"),
+  sample: document.querySelector("#sample-button")
 };
 
 let worker;
@@ -64,8 +64,7 @@ function selectedLanguage() {
 }
 
 function selectedPreset() {
-  const value = document.querySelector('input[name="preset"]:checked')?.value || "standard";
-  return { standard: 0, hardened: 1, maximum: 2 }[value];
+  return { standard: 0, hardened: 1, maximum: 2 }[elements.preset.value] ?? 0;
 }
 
 function byteLength(value) {
@@ -170,10 +169,10 @@ function setLanguage(language, replaceSource = true) {
   const isLua = language === "lua";
   document.querySelector(`input[name="language"][value="${language}"]`).checked = true;
   document.querySelector("#standard-preset-label").textContent = isLua ? "Standard" : "Source VM";
-  document.querySelectorAll('input[name="preset"]').forEach((input) => {
-    input.disabled = !isLua && input.value !== "standard";
+  Array.from(elements.preset.options).forEach((option) => {
+    option.disabled = !isLua && option.value !== "standard";
   });
-  if (!isLua) document.querySelector('input[name="preset"][value="standard"]').checked = true;
+  if (!isLua) elements.preset.value = "standard";
   elements.sourceLabel.textContent = isLua ? "Source LuaJIT" : "Source JavaScript";
   elements.outputLabel.textContent = isLua ? "Protected LuaJIT" : "Protected JavaScript";
   elements.source.setAttribute("aria-label", isLua ? "Source LuaJIT" : "Source JavaScript");
@@ -254,18 +253,16 @@ function rotateHero() {
   heroLanguage = heroLanguage === "javascript" ? "lua" : "javascript";
   elements.heroLanguage.classList.add("is-changing");
   setTimeout(() => {
-    elements.heroLanguage.textContent = preview[heroLanguage].label;
-    elements.previewFile.textContent = preview[heroLanguage].file;
-    elements.previewSource.innerHTML = preview[heroLanguage].code;
+    elements.heroLanguage.textContent = rotatingLabels[heroLanguage];
     elements.heroLanguage.classList.remove("is-changing");
-  }, 220);
+  }, 180);
 }
 
 document.querySelectorAll('input[name="language"]').forEach((input) => input.addEventListener("change", () => setLanguage(input.value)));
-document.querySelectorAll('input[name="preset"]').forEach((input) => input.addEventListener("change", () => {
+elements.preset.addEventListener("change", () => {
   invalidateActiveJob();
-  setMessage(`${input.value[0].toUpperCase()}${input.value.slice(1)} native VM profile selected`);
-}));
+  setMessage(`${elements.preset.options[elements.preset.selectedIndex].text} profile selected`);
+});
 elements.source.addEventListener("input", () => {
   updateSourceStats();
   if (activeRequest || elements.output.value) invalidateActiveJob();
@@ -283,6 +280,13 @@ elements.obfuscate.addEventListener("click", obfuscate);
 elements.copy.addEventListener("click", copyOutput);
 elements.download.addEventListener("click", downloadOutput);
 elements.upload.addEventListener("click", () => elements.fileInput.click());
+elements.sample.addEventListener("click", () => {
+  elements.source.value = samples[selectedLanguage()];
+  invalidateActiveJob();
+  updateSourceStats();
+  setMessage(`${selectedLanguage() === "lua" ? "LuaJIT" : "JavaScript"} example loaded`);
+  elements.source.focus();
+});
 elements.fileInput.addEventListener("change", () => loadFile(elements.fileInput.files[0]));
 elements.clear.addEventListener("click", () => { elements.source.value = ""; invalidateActiveJob(); updateSourceStats(); elements.source.focus(); });
 ["dragenter", "dragover"].forEach((type) => elements.dropZone.addEventListener(type, (event) => { event.preventDefault(); elements.dropZone.classList.add("is-dragging"); }));

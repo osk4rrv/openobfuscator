@@ -68,6 +68,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view v1.2.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v1.2.0 already exists; leaving immutable release assets unchanged."
+            exit 0
+          fi
           gh release create v1.2.0 release-assets/* \
             --target "${{ github.sha }}" \
             --title "V1.2" \
