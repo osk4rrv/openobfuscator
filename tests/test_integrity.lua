@@ -1,4 +1,4 @@
-local path = assert(arg[1], "missing generated VM path")
+local path = assert(arg[1], "missing generated loader path")
 local input = assert(io.open(path, "rb"))
 local source = input:read("*a")
 input:close()
@@ -6,14 +6,14 @@ input:close()
 local function programWords(wrapper)
     local blockStart, blockEnd, body = wrapper:find(
         "local%s+l[%w]+%s*=%s*{%s*([%d,%s]+)%s*}%s*local%s+l[%w]+%s*=%s*{}")
-    assert(blockStart and body, "could not locate the VM instruction stream")
+    assert(blockStart and body, "could not locate the loader instruction stream")
     local bodyStart, bodyEnd = wrapper:find(body, blockStart, true)
-    assert(bodyStart and bodyEnd and bodyEnd <= blockEnd, "could not locate VM instruction bytes")
+    assert(bodyStart and bodyEnd and bodyEnd <= blockEnd, "could not locate loader instruction bytes")
     local words = {}
     for value in body:gmatch("%d+") do
         words[#words + 1] = assert(tonumber(value))
     end
-    assert(#words > 1, "VM instruction stream is unexpectedly short")
+    assert(#words > 1, "loader instruction stream is unexpectedly short")
     return words, bodyStart, bodyEnd
 end
 
@@ -33,8 +33,8 @@ local function expectIntegrity(name, wrapper)
     assert(chunk, loadError)
     local ok, runtimeError = pcall(chunk)
     os.remove(variantPath)
-    assert(not ok, name .. ": tampered VM unexpectedly executed")
-    assert(tostring(runtimeError):find("integrity:vm", 1, true), name .. ": " .. tostring(runtimeError))
+    assert(not ok, name .. ": tampered loader unexpectedly executed")
+    assert(tostring(runtimeError):find("integrity:loader", 1, true), name .. ": " .. tostring(runtimeError))
 end
 
 expectIntegrity("unknown-opcode", replaceProgram(source, function(words)
@@ -67,11 +67,11 @@ expectIntegrity("payload-checksum", replaceProgram(source, function(words)
 end))
 
 local lengthMutations = 0
-local badLength = source:gsub("(if%s+#l[%w]+~=)(%d+)(%s+then%s+error%(%\"integrity:vm%\",0%))", function(prefix, length, suffix)
+local badLength = source:gsub("(if%s+#l[%w]+~=)(%d+)(%s+then%s+error%(%\"integrity:loader%\",0%))", function(prefix, length, suffix)
     lengthMutations = lengthMutations + 1
     return prefix .. tostring(tonumber(length) + 1) .. suffix
 end, 1)
 assert(lengthMutations == 1, "could not locate source length check")
 expectIntegrity("source-length", badLength)
 
-io.write("VM rejects unknown opcodes, invalid HALT flow, payload tampering, and wrong length\n")
+io.write("Loader rejects unknown opcodes, invalid HALT flow, payload tampering, and wrong length\n")

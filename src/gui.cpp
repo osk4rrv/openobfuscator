@@ -161,7 +161,7 @@ void runObfuscation() {
         }
 
         if (isEsmPath(inPath)) {
-            throw std::runtime_error("ECMAScript modules (.mjs) are not supported by the JavaScript source VM.");
+            throw std::runtime_error("ECMAScript modules (.mjs) are not supported by the JavaScript encoded source loader.");
         }
 
         ObfuscationOptions opts;
@@ -226,7 +226,7 @@ void createUi(HWND hwnd) {
     g_ui.window = hwnd;
     g_ui.font = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
-    makeControl(L"STATIC", L"OpenObfuscator LuaJIT & JavaScript Source VM", SS_LEFT, 22, 16, 400, 26, 0);
+    makeControl(L"STATIC", L"OpenObfuscator LuaJIT & JavaScript Encoded Source Loader", SS_LEFT, 22, 16, 400, 26, 0);
     makeControl(L"STATIC", L"Input script:", SS_LEFT, 22, 56, 105, 22, 0);
     makeControl(L"STATIC", L"Output script:", SS_LEFT, 22, 90, 105, 22, 0);
     g_ui.input = makeControl(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 140, 54, 500, 24, IdInput);
@@ -240,7 +240,7 @@ void createUi(HWND hwnd) {
     makeCheck(L"Junk code injection", 22, 170, 190, IdJunk, true);
     makeCheck(L"Anti-debug guards", 240, 170, 190, IdAntiDebug, true);
     makeCheck(L"Compress output", 458, 170, 190, IdCompress, true);
-    makeCheck(L"Source VM wrapper", 22, 204, 190, IdVm, true);
+    makeCheck(L"Encoded Source Loader wrapper", 22, 204, 190, IdVm, true);
     makeCheck(L"LuaJIT-only runtime", 240, 204, 190, IdLuaJit, true);
     makeCheck(L"OpenObfuscator style", 458, 204, 220, IdStyle, true);
     makeCheck(L"Control-flow flattening", 22, 238, 200, IdFlatten, false);
@@ -324,7 +324,7 @@ int runGui() {
 
     RegisterClassExW(&wc);
 
-    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT & JavaScript Source VM", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
+    HWND hwnd = CreateWindowExW(0, className, L"OpenObfuscator LuaJIT & JavaScript Encoded Source Loader", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 760, 440, nullptr, nullptr, instance, nullptr);
     if (!hwnd) return 1;
 
     MSG msg {};

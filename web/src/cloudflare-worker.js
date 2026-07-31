@@ -1,6 +1,6 @@
-const MAX_SOURCE_BYTES = 500_000;
-const MAX_REQUEST_BYTES = 3_100_000;
-const ORIGIN_TIMEOUT_MS = 25_000;
+const ORIGIN_TIMEOUT_MS = 180_000;
+const CLIENT_COOKIE = "oo_client";
+const CLIENT_COOKIE_SECONDS = 60 * 60;
 
 const SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
@@ -15,8 +15,8 @@ function apiHeaders(extra = {}) {
   return { ...SECURITY_HEADERS, "Cache-Control": "no-store", ...extra };
 }
 
-function errorResponse(status, error) {
-  return Response.json({ error }, { status, headers: apiHeaders() });
+function errorResponse(status, error, extraHeaders = {}) {
+  return Response.json({ error }, { status, headers: apiHeaders(extraHeaders) });
 }
 
 function configured(env) {
@@ -26,37 +26,44 @@ function configured(env) {
     env.OBFUSCATOR_API_TOKEN.length >= 32;
 }
 
-async function readUtf8Body(request, byteLimit) {
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const chunks = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > byteLimit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
+function readCookie(request, name) {
+  const cookieHeader = request.headers.get("Cookie") || "";
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator === -1 || part.slice(0, separator).trim() !== name) continue;
+    const value = part.slice(separator + 1).trim().toLowerCase();
+    if (/^[a-f0-9]{32}$/.test(value)) return value;
   }
-  const body = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
+  return null;
+}
+
+function clientIdentity(request) {
+  const existing = readCookie(request, CLIENT_COOKIE);
+  const id = existing || crypto.randomUUID().replaceAll("-", "");
+  return {
+    id,
+    setCookie: `${CLIENT_COOKIE}=${id}; Max-Age=${CLIENT_COOKIE_SECONDS}; Path=/; Secure; HttpOnly; SameSite=Strict`
+  };
+}
+
+function forwardedHeaders(upstream, setCookie) {
+  const headers = {};
+  for (const name of ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"]) {
+    const value = upstream.headers.get(name);
+    if (value !== null) headers[name] = value;
   }
-  return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  if (setCookie) headers["Set-Cookie"] = setCookie;
+  return headers;
 }
 
 async function originFetch(env, path, init = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ORIGIN_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal;
   try {
     return await fetch(`${env.OBFUSCATOR_API_URL.replace(/\/$/, "")}${path}`, {
       ...init,
-      signal: controller.signal,
+      signal,
       headers: {
         ...init.headers,
         Authorization: `Bearer ${env.OBFUSCATOR_API_TOKEN}`
@@ -80,51 +87,38 @@ async function obfuscateResponse(request, env) {
     return new Response(null, { status: 405, headers: apiHeaders({ Allow: "POST" }) });
   }
   if (!configured(env)) return errorResponse(503, "Service is not configured");
-  if ((request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase() !== "application/json") {
-    return errorResponse(415, "Content-Type must be application/json");
+  if ((request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase() !== "text/plain") {
+    return errorResponse(415, "Content-Type must be text/plain");
   }
 
-  const contentLengthHeader = request.headers.get("Content-Length");
-  if (contentLengthHeader !== null) {
-    const declaredLength = Number(contentLengthHeader);
-    if (!Number.isSafeInteger(declaredLength) || declaredLength < 0) return errorResponse(400, "Invalid Content-Length");
-    if (declaredLength > MAX_REQUEST_BYTES) return errorResponse(413, "Request is too large");
-  }
+  const language = (request.headers.get("X-OpenObfuscator-Language") || "").trim().toLowerCase();
+  const preset = (request.headers.get("X-OpenObfuscator-Preset") || "").trim();
+  if (!new Set(["lua", "javascript"]).has(language)) return errorResponse(400, "Unsupported language");
+  if (!new Set(["0", "1", "2"]).has(preset)) return errorResponse(400, "Unsupported protection preset");
+  if (language === "javascript" && preset !== "0") return errorResponse(400, "JavaScript supports only the encoded-loader preset");
 
-  let requestText;
-  try {
-    requestText = await readUtf8Body(request, MAX_REQUEST_BYTES);
-  } catch {
-    return errorResponse(400, "Could not read request body");
-  }
-  if (requestText === null) return errorResponse(413, "Request is too large");
-
-  let payload;
-  try {
-    payload = JSON.parse(requestText);
-  } catch {
-    return errorResponse(400, "Invalid JSON");
-  }
-  if (!payload || typeof payload !== "object" || typeof payload.source !== "string" || !payload.source.trim()) {
-    return errorResponse(400, "Source code is required");
-  }
-  if (new TextEncoder().encode(payload.source).length > MAX_SOURCE_BYTES) return errorResponse(413, "Source exceeds the 500 KB limit");
-  if (!new Set(["lua", "javascript"]).has(payload.language)) return errorResponse(400, "Unsupported language");
-  if (!Number.isInteger(payload.preset) || payload.preset < 0 || payload.preset > 2) return errorResponse(400, "Unsupported protection preset");
-  if (payload.language === "javascript" && payload.preset !== 0) return errorResponse(400, "JavaScript supports only the source VM preset");
+  const identity = clientIdentity(request);
 
   let upstream;
   try {
     upstream = await originFetch(env, "/obfuscate", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Client-IP": request.headers.get("CF-Connecting-IP") || "127.0.0.1"
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-OpenObfuscator-Language": language,
+        "X-OpenObfuscator-Preset": preset,
+        "X-Client-IP": request.headers.get("CF-Connecting-IP") || "127.0.0.1",
+        "X-Client-ID": identity.id
       },
-      body: JSON.stringify({ source: payload.source, language: payload.language, preset: payload.preset })
+      body: request.body,
+      signal: request.signal
     });
   } catch {
-    return errorResponse(502, "Obfuscation origin did not respond");
+    return errorResponse(
+      502,
+      "Obfuscation origin did not respond",
+      identity.setCookie ? { "Set-Cookie": identity.setCookie } : {}
+    );
   }
 
   if (!upstream.ok) {
@@ -135,13 +129,14 @@ async function obfuscateResponse(request, env) {
     } catch {
       // Keep the public generic message when the origin response is malformed.
     }
-    const status = [400, 413, 422, 429, 504].includes(upstream.status) ? upstream.status : 502;
-    return errorResponse(status, message);
+    const status = [400, 408, 411, 413, 415, 422, 429, 501, 504].includes(upstream.status) ? upstream.status : 502;
+    return errorResponse(status, message, forwardedHeaders(upstream, identity.setCookie));
   }
 
   const headers = apiHeaders({
     "Content-Type": "text/plain; charset=utf-8",
-    "X-Obfuscation-Duration-Ms": upstream.headers.get("X-Obfuscation-Duration-Ms") || "0"
+    "X-Obfuscation-Duration-Ms": upstream.headers.get("X-Obfuscation-Duration-Ms") || "0",
+    ...forwardedHeaders(upstream, identity.setCookie)
   });
   return new Response(upstream.body, { status: 200, headers });
 }
