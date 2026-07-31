@@ -1,0 +1,19 @@
+openobfuscator-origin.syntaxlua.xyz {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8788
+
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Cache-Control "no-store"
+    }
+
+    log {
+        output file /var/log/caddy/openobfuscator-origin-access.log {
+            roll_size 10MiB
+            roll_keep 3
+        }
+        format json
+    }
+}

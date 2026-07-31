@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:engine": "bash scripts/build-engine.sh",
-    "build": "npm run build:engine && node scripts/build.mjs",
+    "build": "node scripts/build.mjs",
     "check": "node scripts/check.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
