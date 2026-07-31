@@ -1,4 +1,5 @@
 const ORIGIN_TIMEOUT_MS = 180_000;
+const HEALTH_TIMEOUT_MS = 5_000;
 const CLIENT_COOKIE = "oo_client";
 const CLIENT_COOKIE_SECONDS = 60 * 60;
 
@@ -56,12 +57,15 @@ function forwardedHeaders(upstream, setCookie) {
   return headers;
 }
 
-async function originFetch(env, path, init = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ORIGIN_TIMEOUT_MS);
-  const signal = init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal;
+async function originFetch(env, path, init = {}, timeoutMs = ORIGIN_TIMEOUT_MS) {
+  const deadline = new AbortController();
+  const timeoutError = new Error("Origin response timed out");
+  const timeout = setTimeout(() => deadline.abort(timeoutError), timeoutMs);
+  const signal = init.signal ? AbortSignal.any([deadline.signal, init.signal]) : deadline.signal;
+
+  let upstream;
   try {
-    return await fetch(`${env.OBFUSCATOR_API_URL.replace(/\/$/, "")}${path}`, {
+    upstream = await fetch(`${env.OBFUSCATOR_API_URL.replace(/\/$/, "")}${path}`, {
       ...init,
       signal,
       headers: {
@@ -69,13 +73,80 @@ async function originFetch(env, path, init = {}) {
         Authorization: `Bearer ${env.OBFUSCATOR_API_TOKEN}`
       }
     });
-  } finally {
+  } catch (error) {
     clearTimeout(timeout);
+    throw error;
   }
+
+  if (!upstream.body) {
+    clearTimeout(timeout);
+    return upstream;
+  }
+
+  const reader = upstream.body.getReader();
+  let settled = false;
+  let bodyController;
+  const body = new ReadableStream({
+    start(controller) {
+      bodyController = controller;
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (settled) return;
+        if (done) {
+          settled = true;
+          clearTimeout(timeout);
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      deadline.abort(reason);
+      await reader.cancel(reason);
+    }
+  });
+
+  signal.addEventListener("abort", () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeout);
+    reader.cancel(signal.reason).catch(() => {});
+    bodyController.error(signal.reason || timeoutError);
+  }, { once: true });
+
+  return new Response(body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: upstream.headers
+  });
 }
 
-function healthResponse(env) {
+async function healthResponse(request, env) {
   if (!configured(env)) return errorResponse(503, "Service is not configured");
+  try {
+    const upstream = await originFetch(env, "/health", {
+      headers: { Accept: "application/json" },
+      signal: request.signal
+    }, HEALTH_TIMEOUT_MS);
+    if (!upstream.ok) throw new Error("Origin health check failed");
+    const health = await upstream.json();
+    if (health?.status !== "ok" || health?.service !== "openobfuscator-origin" || health?.version !== "1.3.0") {
+      throw new Error("Origin identity or version mismatch");
+    }
+  } catch {
+    return errorResponse(503, "Obfuscation origin is unavailable");
+  }
   return Response.json(
     { status: "ok", service: "openobfuscator", version: "1.3.0", languages: ["javascript", "luajit"] },
     { headers: apiHeaders() }
@@ -144,7 +215,7 @@ async function obfuscateResponse(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/api/health") return healthResponse(env);
+    if (url.pathname === "/api/health") return healthResponse(request, env);
     if (url.pathname === "/api/obfuscate") return obfuscateResponse(request, env);
     if (url.pathname.startsWith("/api/")) return errorResponse(404, "Not found");
 

@@ -1,3 +1,5 @@
+const REQUEST_TIMEOUT_MS = 185_000;
+
 const samples = {
   javascript: `const cart = [
   { name: "Keyboard", price: 89 },
@@ -110,7 +112,10 @@ function resetOutput() {
 
 function invalidateActiveJob() {
   activeJob += 1;
-  activeRequest?.controller.abort();
+  if (activeRequest) {
+    clearTimeout(activeRequest.timeout);
+    activeRequest.controller.abort();
+  }
   activeRequest = null;
   setBusy(false);
   resetOutput();
@@ -135,6 +140,7 @@ async function checkService(attempt = 0) {
 function handleApiResult({ id, code, error, duration, remaining }) {
   if (id !== activeJob || !activeRequest) return;
   const request = activeRequest;
+  clearTimeout(request.timeout);
   activeRequest = null;
   setBusy(false);
   if (error) {
@@ -185,11 +191,18 @@ async function obfuscate() {
   const id = activeJob;
   const language = selectedLanguage();
   const controller = new AbortController();
-  activeRequest = {
+  const request = {
     controller,
     sourceBytes: size,
-    outputFileName
+    outputFileName,
+    timedOut: false,
+    timeout: null
   };
+  request.timeout = setTimeout(() => {
+    request.timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  activeRequest = request;
   setBusy(true);
 
   const started = performance.now();
@@ -226,7 +239,14 @@ async function obfuscate() {
       remaining: Number.isInteger(remaining) ? remaining : undefined
     });
   } catch (error) {
-    if (error.name !== "AbortError") handleApiResult({ id, error: "The obfuscation service did not respond." });
+    if (error.name !== "AbortError" || request.timedOut) {
+      handleApiResult({
+        id,
+        error: request.timedOut
+          ? "The obfuscation timed out. Try a smaller source file or try again shortly."
+          : "The obfuscation service did not respond."
+      });
+    }
   }
 }
 
