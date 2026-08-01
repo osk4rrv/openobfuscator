@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from contextlib import closing
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -115,7 +116,7 @@ def rate_connection() -> sqlite3.Connection:
 
 def initialize_rate_store() -> None:
     RATE_DB.parent.mkdir(parents=True, exist_ok=True)
-    with rate_connection() as connection:
+    with closing(rate_connection()) as connection, connection:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS allowance (identity_type TEXT NOT NULL, identity TEXT NOT NULL, used_at REAL NOT NULL)"
         )
@@ -160,14 +161,14 @@ def allowance_state(
 
 def check_allowance(ip: str, cookie: str) -> tuple[bool, int, int]:
     now = time.time()
-    with RATE_LIMIT_LOCK, rate_connection() as connection:
+    with RATE_LIMIT_LOCK, closing(rate_connection()) as connection, connection:
         purge_expired(connection, now)
         return allowance_state(connection, now, ip, cookie)
 
 
 def record_success(ip: str, cookie: str) -> tuple[bool, int, int]:
     now = time.time()
-    with RATE_LIMIT_LOCK, rate_connection() as connection:
+    with RATE_LIMIT_LOCK, closing(rate_connection()) as connection, connection:
         purge_expired(connection, now)
         allowed, remaining, reset_after = allowance_state(connection, now, ip, cookie)
         if not allowed:
@@ -185,7 +186,7 @@ def allowance_cleanup_loop() -> None:
         delay = 60.0
         try:
             now = time.time()
-            with RATE_LIMIT_LOCK, rate_connection() as connection:
+            with RATE_LIMIT_LOCK, closing(rate_connection()) as connection, connection:
                 purge_expired(connection, now)
                 oldest = connection.execute("SELECT MIN(used_at) FROM allowance").fetchone()[0]
             if oldest is not None:
